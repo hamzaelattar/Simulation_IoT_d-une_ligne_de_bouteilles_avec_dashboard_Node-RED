@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Node-RED — Ligne de bouteilles</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06101c;
+      --panel: #0d1c2e;
+      --panel2: #10253a;
+      --line: #27435d;
+      --text: #e8f3ff;
+      --muted: #8ca6bd;
+      --cyan: #29d9ff;
+      --green: #33e18a;
+      --red: #ff5263;
+      --orange: #ffae42;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 960px;
+      color: var(--text);
+      background: radial-gradient(circle at 50% -20%, #163859, transparent 42%), var(--bg);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+    .wrap { width: min(1500px, calc(100% - 28px)); margin: 14px auto 30px; }
+    header, .panel, details {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(13, 28, 46, .95);
+      box-shadow: 0 16px 45px rgba(0,0,0,.22);
+    }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 15px 18px; gap: 18px; }
+    h1 { margin: 0; font-size: 20px; }
+    .sub { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .connection { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; font-weight: 800; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #6f8497; }
+    .dot.online { background: var(--green); box-shadow: 0 0 16px var(--green); }
+    .actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+    button {
+      padding: 9px 13px;
+      border: 1px solid #315674;
+      border-radius: 8px;
+      color: var(--text);
+      background: #14304a;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    button:hover { background: #1b4264; }
+    button.start { color: #042013; background: var(--green); border-color: #75f3b2; }
+    button.danger { background: #652836; border-color: #b44255; }
+
+    .cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 12px 0; }
+    .card { padding: 13px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel2); }
+    .card .label { color: var(--muted); font-size: 9px; letter-spacing: .8px; text-transform: uppercase; }
+    .card .value { margin-top: 7px; font-size: 25px; font-weight: 900; }
+    .green { color: var(--green); }
+    .red { color: var(--red); }
+    .cyan { color: var(--cyan); }
+    .orange { color: var(--orange); }
+
+    .grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 12px; margin-bottom: 12px; }
+    .panel { padding: 15px; min-width: 0; }
+    .panel h2 { margin: 0 0 13px; font-size: 13px; letter-spacing: .5px; }
+    .machine-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+    .machine { padding: 12px; border-radius: 9px; background: #091a2a; border: 1px solid #203d57; }
+    .machine span { display: block; color: var(--muted); font-size: 9px; margin-bottom: 7px; }
+    .machine strong { font-size: 13px; }
+    .machine small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; }
+    .quality-result { margin-top: 10px; padding: 11px; border-radius: 9px; background: #091a2a; border-left: 4px solid #607387; }
+    .quality-result.good { border-color: var(--green); }
+    .quality-result.bad { border-color: var(--red); }
+    .quality-result small { display: block; color: var(--muted); margin-bottom: 5px; }
+    #chart { width: 100%; height: 175px; display: block; background: #081725; border-radius: 9px; }
+
+    .settings { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; margin-bottom: 12px; }
+    .setting { padding: 10px; border: 1px solid #203d57; border-radius: 9px; background: #091a2a; }
+    .setting label { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
+    .setting output { color: var(--text); font-weight: 800; }
+    .setting input { width: 100%; margin-top: 9px; accent-color: var(--cyan); }
+
+    .table-wrap { max-height: 260px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid #1b344c; }
+    th { position: sticky; top: 0; color: var(--muted); background: var(--panel); font-size: 9px; letter-spacing: .7px; text-transform: uppercase; }
+    .empty { color: var(--muted); text-align: center; padding: 25px; }
+
+    details { margin-top: 12px; overflow: hidden; }
+    summary { padding: 13px 16px; cursor: pointer; font-size: 13px; font-weight: 800; }
+    iframe { display: block; width: 100%; height: 1040px; border: 0; border-top: 1px solid var(--line); background: var(--bg); }
+    footer { padding: 14px 3px; color: #5f788e; font-size: 10px; text-align: center; }
+
+    @media (max-width: 1150px) {
+      .cards { grid-template-columns: repeat(3, 1fr); }
+      .settings { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div>
+        <h1>Dashboard Node-RED — Ligne de bouteilles</h1>
+        <div class="sub">Supervision, qualité, traçabilité et commande en temps réel</div>
+      </div>
+      <div class="actions">
+        <div class="connection"><span class="dot" id="connectionDot"></span><span id="connectionText">EN ATTENTE</span></div>
+        <button class="start" data-action="start">▶ Démarrer</button>
+        <button data-action="pause">Ⅱ Pause</button>
+        <button data-action="stop">■ Stop</button>
+        <button data-action="reset">↺ Reset</button>
+        <button class="danger" data-action="fault">⚠ Panne</button>
+      </div>
+    </header>
+
+    <section class="cards">
+      <div class="card"><div class="label">État de la ligne</div><div class="value" id="status">ARRÊTÉE</div></div>
+      <div class="card"><div class="label">Passages</div><div class="value" id="total">0</div></div>
+      <div class="card"><div class="label">Conformes</div><div class="value green" id="good">0</div></div>
+      <div class="card"><div class="label">Rejets</div><div class="value red" id="reject">0</div></div>
+      <div class="card"><div class="label">Taux de défaut</div><div class="value orange" id="defectRate">0,0 %</div></div>
+      <div class="card"><div class="label">Produits / min</div><div class="value cyan" id="ppm">0</div></div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>État du processus</h2>
+        <div class="machine-grid">
+          <div class="machine"><span>BOUTEILLES EN LIGNE</span><strong id="currentProducts">0</strong></div>
+          <div class="machine"><span>EMBALLAGE</span><strong id="packMachine">DISPONIBLE</strong><small id="packQueue">File : 0</small></div>
+          <div class="machine"><span>CONTRÔLE QUALITÉ</span><strong id="qualityMachine">DISPONIBLE</strong><small id="qualityQueue">File : 0</small></div>
+        </div>
+        <div class="quality-result" id="qualityResult">
+          <small>DERNIER CONTRÔLE</small>
+          <strong id="qualityText">Aucune bouteille contrôlée</strong>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Évolution — 60 derniers échantillons</h2>
+        <svg id="chart" viewBox="0 0 700 175" aria-label="Évolution de la production et du taux de défaut">
+          <line x1="38" y1="145" x2="680" y2="145" stroke="#27435d"/>
+          <line x1="38" y1="18" x2="38" y2="145" stroke="#27435d"/>
+          <text x="45" y="32" fill="#29d9ff" font-size="10">Production</text>
+          <text x="605" y="32" fill="#ff5263" font-size="10">Défaut %</text>
+          <polyline id="totalLine" points="" fill="none" stroke="#29d9ff" stroke-width="3"/>
+          <polyline id="rateLine" points="" fill="none" stroke="#ff5263" stroke-width="2"/>
+        </svg>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:12px">
+      <h2>Paramètres envoyés à la simulation</h2>
+      <div class="settings">
+        <div class="setting"><label>Vitesse <output id="speedOut">90 px/s</output></label><input id="speed" type="range" min="30" max="180" step="10" value="90"></div>
+        <div class="setting"><label>Cadence <output id="intervalOut">5,0 s</output></label><input id="interval" type="range" min="1" max="10" step="0.5" value="5"></div>
+        <div class="setting"><label>Emballage <output id="packTimeOut">3,0 s</output></label><input id="packTime" type="range" min="1" max="8" step="0.5" value="3"></div>
+        <div class="setting"><label>Contrôle <output id="qualityTimeOut">2,0 s</output></label><input id="qualityTime" type="range" min="0.5" max="6" step="0.5" value="2"></div>
+        <div class="setting"><label>Défauts <output id="defectProbabilityOut">20 %</output></label><input id="defectProbability" type="range" min="0" max="60" step="1" value="20"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Historique de traçabilité</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Heure</th><th>Remplissage</th><th>Résultat</th><th>Défaut détecté</th></tr></thead>
+          <tbody id="history"><tr><td colspan="5" class="empty">Aucune donnée reçue</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <details open>
+      <summary>Vue complète de la simulation SVG</summary>
+      <iframe src="/simulation" title="Simulation industrielle SVG"></iframe>
+    </details>
+    <footer>Node-RED • API locale /iot • Actualisation toutes les 750 ms</footer>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let latest = null;
+
+    function numberFr(value, decimals = 0) {
+      return Number(value || 0).toLocaleString('fr-FR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
+    async function sendCommand(action, extra = {}) {
+      try {
+        await fetch('/iot/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, ...extra })
+        });
+      } catch (error) {
+        console.error('Commande Node-RED impossible', error);
+      }
+    }
+
+    document.querySelectorAll('[data-action]').forEach((button) => {
+      button.addEventListener('click', () => sendCommand(button.dataset.action));
+    });
+
+    const settingIds = ['speed', 'interval', 'packTime', 'qualityTime', 'defectProbability'];
+    const formatters = {
+      speed: (v) => `${v} px/s`,
+      interval: (v) => `${numberFr(v, 1)} s`,
+      packTime: (v) => `${numberFr(v, 1)} s`,
+      qualityTime: (v) => `${numberFr(v, 1)} s`,
+      defectProbability: (v) => `${v} %`
+    };
+
+    settingIds.forEach((id) => {
+      const input = $(id);
+      input.addEventListener('input', () => { $(`${id}Out`).textContent = formatters[id](input.value); });
+      input.addEventListener('change', () => {
+        const values = {};
+        settingIds.forEach((key) => { values[key] = Number($(key).value); });
+        sendCommand('config', { values });
+      });
+    });
+
+    function renderChart(samples = []) {
+      const values = samples.slice(-60);
+      if (values.length < 2) {
+        $('totalLine').setAttribute('points', '');
+        $('rateLine').setAttribute('points', '');
+        return;
+      }
+      const maxTotal = Math.max(1, ...values.map((item) => Number(item.total || 0)));
+      const point = (item, index, key, max) => {
+        const x = 38 + index * (642 / Math.max(1, values.length - 1));
+        const y = 145 - Math.min(max, Number(item[key] || 0)) / max * 115;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      };
+      $('totalLine').setAttribute('points', values.map((v, i) => point(v, i, 'total', maxTotal)).join(' '));
+      $('rateLine').setAttribute('points', values.map((v, i) => point(v, i, 'defectRate', 100)).join(' '));
+    }
+
+    function render(data) {
+      latest = data;
+      const online = Boolean(data.online);
+      $('connectionDot').classList.toggle('online', online);
+      $('connectionText').textContent = online ? 'SIMULATION CONNECTÉE' : 'SIMULATION HORS LIGNE';
+      $('status').textContent = data.status || 'ARRÊTÉE';
+      $('status').className = `value ${data.fault ? 'red' : data.running ? 'green' : data.paused ? 'orange' : ''}`;
+      $('total').textContent = data.totals?.passages || 0;
+      $('good').textContent = data.totals?.good || 0;
+      $('reject').textContent = data.totals?.reject || 0;
+      $('defectRate').textContent = `${numberFr(data.defectRate, 1)} %`;
+      $('ppm').textContent = data.productsPerMinute || 0;
+      $('currentProducts').textContent = data.currentProducts || 0;
+      $('packMachine').textContent = data.machines?.packaging || 'DISPONIBLE';
+      $('qualityMachine').textContent = data.machines?.quality || 'DISPONIBLE';
+      $('packQueue').textContent = `File : ${data.queues?.packaging || 0}`;
+      $('qualityQueue').textContent = `File : ${data.queues?.quality || 0}`;
+
+      const quality = data.lastQuality;
+      const qualityBox = $('qualityResult');
+      qualityBox.className = `quality-result ${quality ? quality.defective ? 'bad' : 'good' : ''}`;
+      $('qualityText').textContent = quality
+        ? `${quality.id} • ${quality.fillLevel} % • ${quality.defective ? quality.defectType : 'CONFORME'}`
+        : 'Aucune bouteille contrôlée';
+
+      if (data.config) {
+        settingIds.forEach((id) => {
+          const input = $(id);
+          if (document.activeElement !== input && data.config[id] != null) input.value = data.config[id];
+          $(`${id}Out`).textContent = formatters[id](input.value);
+        });
+      }
+
+      const rows = data.history || [];
+      $('history').innerHTML = rows.length ? rows.map((item) => `
+        <tr>
+          <td>${item.id}</td><td>${item.time}</td><td>${item.fillLevel} %</td>
+          <td class="${item.defective ? 'red' : 'green'}">${item.defective ? 'NON CONFORME' : 'CONFORME'}</td>
+          <td>${item.defective ? item.defectType : 'Aucun défaut'}</td>
+        </tr>`).join('') : '<tr><td colspan="5" class="empty">Aucune bouteille comptabilisée</td></tr>';
+      renderChart(data.samples || []);
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch(`/iot/status?t=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        render(await response.json());
+      } catch {
+        $('connectionDot').classList.remove('online');
+        $('connectionText').textContent = 'NODE-RED INDISPONIBLE';
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 750);
+  </script>
+</body>
+</html>

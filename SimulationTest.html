@@ -74,6 +74,21 @@
 
     h1 { margin: 0; font-size: 19px; letter-spacing: .3px; }
     .subtitle { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .node-red-pill {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 8px;
+      padding: 3px 7px;
+      border: 1px solid #3c5268;
+      border-radius: 999px;
+      color: #9eb1c3;
+      background: #091725;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .4px;
+      vertical-align: middle;
+    }
+    .node-red-pill.online { color: #7af1b1; border-color: #247951; background: #0b2d20; }
 
     .controls {
       padding: 12px;
@@ -182,7 +197,7 @@
         <div class="brand-mark">SVG</div>
         <div>
           <h1>Ligne de production intelligente</h1>
-          <div class="subtitle">Source → Emballage → Contrôle qualité → Comptage → Tri</div>
+          <div class="subtitle">Source → Emballage → Contrôle qualité → Comptage → Tri <span class="node-red-pill" id="nodeRedState">NODE-RED HORS LIGNE</span></div>
         </div>
       </div>
 
@@ -446,6 +461,18 @@
         defectProbability: 20
       };
 
+      const nodeRedBase = new URLSearchParams(location.search).get('nodeRed') ||
+        (location.protocol === 'http:' || location.protocol === 'https:' ? location.origin : 'http://127.0.0.1:1880');
+
+      const nodeRed = {
+        lastTelemetry: 0,
+        telemetryPending: false,
+        lastCommandPoll: 0,
+        commandPending: false,
+        lastCommandId: null,
+        online: false
+      };
+
       const sim = {
         running: false,
         paused: false,
@@ -462,6 +489,7 @@
         lastQuality: null,
         totals: { passages: 0, good: 0, reject: 0, packed: 0 },
         passageTimes: [],
+        history: [],
         challenge: { active: false, elapsed: 0, target: 100, limit: 600, result: '' },
         lightTimers: { count: 0, quality: 0, presence: 0 }
       };
@@ -478,7 +506,7 @@
         messagePanel: $('messagePanel'), messageBox: $('messageBox'), messageLight: $('messageLight'),
         messageTitle: $('messageTitle'), messageText: $('messageText'),
         challengePanel: $('challengePanel'), challengeBar: $('challengeBar'), challengeProgressText: $('challengeProgressText'),
-        challengeClock: $('challengeClock')
+        challengeClock: $('challengeClock'), nodeRedState: $('nodeRedState')
       };
 
       function svgEl(tag, attrs = {}) {
@@ -652,6 +680,16 @@
         row.innerHTML = `<td>P-${String(product.id).padStart(3, '0')}</td><td>${date.toLocaleTimeString('fr-FR')}</td><td>${product.fillLevel} %</td><td>Terminé</td><td class="${product.defective ? 'ko' : 'ok'}">${result}</td>`;
         els.historyBody.prepend(row);
         while (els.historyBody.rows.length > 20) els.historyBody.deleteRow(-1);
+        sim.history.unshift({
+          id: `P-${String(product.id).padStart(3, '0')}`,
+          timestamp: date.toISOString(),
+          time: date.toLocaleTimeString('fr-FR'),
+          fillLevel: product.fillLevel,
+          defective: product.defective,
+          defectType: product.defectType,
+          result
+        });
+        sim.history = sim.history.slice(0, 20);
       }
 
       function finishQuality(product) {
@@ -808,6 +846,96 @@
         updateMachineVisuals();
       }
 
+      function telemetryPayload() {
+        const defectRate = sim.totals.passages ? sim.totals.reject / sim.totals.passages * 100 : 0;
+        return {
+          timestamp: Date.now(),
+          status: sim.fault ? 'EN PANNE' : sim.paused ? 'EN PAUSE' : sim.running ? 'EN PRODUCTION' : 'ARRÊTÉE',
+          running: sim.running,
+          paused: sim.paused,
+          fault: sim.fault,
+          faultReason: sim.faultReason,
+          totals: { ...sim.totals },
+          defectRate: Number(defectRate.toFixed(1)),
+          productsPerMinute: sim.passageTimes.length,
+          currentProducts: sim.products.length,
+          queues: { packaging: sim.packQueue.length, quality: sim.qualityQueue.length },
+          machines: {
+            packaging: sim.packActive ? 'OCCUPÉE' : 'DISPONIBLE',
+            quality: sim.qualityActive ? 'OCCUPÉE' : 'DISPONIBLE'
+          },
+          config: { ...config },
+          lastQuality: sim.lastQuality ? {
+            id: `P-${String(sim.lastQuality.id).padStart(3, '0')}`,
+            fillLevel: sim.lastQuality.fillLevel,
+            defective: sim.lastQuality.defective,
+            defectType: sim.lastQuality.defectType
+          } : null,
+          history: sim.history
+        };
+      }
+
+      async function sendTelemetry(now) {
+        if (nodeRed.telemetryPending || now - nodeRed.lastTelemetry < 500) return;
+        nodeRed.lastTelemetry = now;
+        nodeRed.telemetryPending = true;
+        try {
+          const response = await fetch(`${nodeRedBase}/iot/telemetry`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+            body: JSON.stringify(telemetryPayload()),
+            cache: 'no-store'
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          nodeRed.online = true;
+        } catch {
+          nodeRed.online = false;
+        } finally {
+          nodeRed.telemetryPending = false;
+          els.nodeRedState.textContent = nodeRed.online ? 'NODE-RED CONNECTÉ' : 'NODE-RED HORS LIGNE';
+          els.nodeRedState.classList.toggle('online', nodeRed.online);
+        }
+      }
+
+      function applyRemoteCommand(command) {
+        if (!command || command.id === nodeRed.lastCommandId) return;
+        nodeRed.lastCommandId = command.id;
+        const action = command.action;
+        if (action === 'start' || action === 'resume') start();
+        else if (action === 'pause' && sim.running) togglePause();
+        else if (action === 'stop') stop();
+        else if (action === 'reset') resetCounters({ clearProducts: Boolean(command.clearProducts) });
+        else if (action === 'fault') triggerFault('Arrêt demandé depuis le dashboard Node-RED');
+        else if (action === 'config' && command.values) {
+          const fields = {
+            speed: 'speed', interval: 'interval', packTime: 'packTime',
+            qualityTime: 'qualityTime', defectProbability: 'defectRate'
+          };
+          Object.entries(command.values).forEach(([key, value]) => {
+            const input = $(fields[key]);
+            if (!input || !Number.isFinite(Number(value))) return;
+            input.value = String(value);
+            input.dispatchEvent(new Event('input'));
+          });
+        }
+      }
+
+      async function pollNodeRedCommand(now) {
+        if (nodeRed.commandPending || now - nodeRed.lastCommandPoll < 700) return;
+        nodeRed.lastCommandPoll = now;
+        nodeRed.commandPending = true;
+        try {
+          const response = await fetch(`${nodeRedBase}/iot/command`, { cache: 'no-store' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          applyRemoteCommand(await response.json());
+          nodeRed.online = true;
+        } catch {
+          nodeRed.online = false;
+        } finally {
+          nodeRed.commandPending = false;
+        }
+      }
+
       function updateChallenge(dt) {
         if (!sim.challenge.active) return;
         sim.challenge.elapsed += dt;
@@ -880,6 +1008,7 @@
       function resetCounters({ clearProducts = false } = {}) {
         sim.totals = { passages: 0, good: 0, reject: 0, packed: 0 };
         sim.passageTimes = [];
+        sim.history = [];
         els.historyBody.innerHTML = '<tr class="empty-row"><td colspan="5">Aucune bouteille comptabilisée</td></tr>';
         if (clearProducts) {
           sim.products.forEach((p) => p.element.remove());
@@ -946,6 +1075,8 @@
           updateChallenge(dt);
         }
         updateDashboard();
+        sendTelemetry(now);
+        pollNodeRedCommand(now);
         requestAnimationFrame(frame);
       }
 

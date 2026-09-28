@@ -1,0 +1,4 @@
+.node-red-runtime/
+node_modules/
+*.log
+
