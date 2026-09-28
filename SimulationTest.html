@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulation industrielle SVG</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06101c;
+      --panel: #0d1c2e;
+      --panel-2: #10253a;
+      --line: #25415c;
+      --text: #e7f2ff;
+      --muted: #8ba4bc;
+      --cyan: #29d9ff;
+      --green: #33e18a;
+      --red: #ff5263;
+      --orange: #ffae42;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 980px;
+      min-height: 100vh;
+      overflow-x: auto;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 50% -20%, #17375b 0, transparent 45%),
+        linear-gradient(180deg, #071321, var(--bg));
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+
+    .app {
+      width: min(1500px, calc(100% - 28px));
+      margin: 14px auto 24px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(310px, 1.2fr) 2fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .brand, .controls, .history-panel {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(13, 28, 46, .92);
+      box-shadow: 0 16px 42px rgba(0, 0, 0, .22);
+    }
+
+    .brand {
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+    }
+
+    .brand-mark {
+      width: 45px;
+      height: 45px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #24708b;
+      border-radius: 12px;
+      color: var(--cyan);
+      background: #0a2233;
+      font-weight: 800;
+      letter-spacing: -1px;
+    }
+
+    h1 { margin: 0; font-size: 19px; letter-spacing: .3px; }
+    .subtitle { margin-top: 4px; color: var(--muted); font-size: 12px; }
+
+    .controls {
+      padding: 12px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 9px;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      padding: 7px 9px;
+      border: 1px solid #1d3852;
+      border-radius: 9px;
+      background: #091a2a;
+    }
+
+    .control-group label {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .control-group input[type="range"] { min-width: 65px; width: 100%; accent-color: var(--cyan); }
+    .control-value { min-width: 50px; text-align: right; color: #fff; font: 700 11px/1 monospace; }
+
+    .actions {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    button {
+      border: 1px solid #2c536f;
+      border-radius: 8px;
+      padding: 8px 13px;
+      color: var(--text);
+      background: #132b42;
+      font: 700 11px/1 "Segoe UI", sans-serif;
+      letter-spacing: .35px;
+      cursor: pointer;
+      transition: transform .12s, background .12s, border-color .12s;
+    }
+
+    button:hover { transform: translateY(-1px); background: #1a3b59; border-color: #3f7598; }
+    button:active { transform: translateY(0); }
+    button.primary { color: #042013; background: var(--green); border-color: #65f2aa; }
+    button.warning { color: #2a1600; background: var(--orange); border-color: #ffc56f; }
+    button.danger { color: #fff; background: #722b38; border-color: #c8495d; }
+
+    .stage {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #0a1727, #07111d);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .32);
+    }
+
+    #factory { display: block; width: 100%; height: auto; min-height: 690px; }
+    svg text { font-family: Inter, "Segoe UI", Arial, sans-serif; user-select: none; }
+
+    .belt-stripe { animation: belt 1s linear infinite; }
+    .paused .belt-stripe, .stopped .belt-stripe, .fault .belt-stripe { animation-play-state: paused; }
+    @keyframes belt { to { transform: translateX(48px); } }
+
+    .sensor-beam { animation: beam 1.15s ease-in-out infinite; }
+    @keyframes beam { 50% { opacity: .25; } }
+
+    .alarm-pulse { animation: alarm .55s ease-in-out infinite alternate; }
+    @keyframes alarm { from { opacity: .28; } to { opacity: 1; } }
+
+    .history-panel { margin-top: 12px; overflow: hidden; }
+    .history-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 15px;
+      border-bottom: 1px solid var(--line);
+    }
+    .history-head h2 { margin: 0; font-size: 14px; letter-spacing: .4px; }
+    .history-head span { color: var(--muted); font-size: 11px; }
+    .history-scroll { max-height: 185px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 9px 15px; text-align: left; border-bottom: 1px solid #193149; }
+    th { position: sticky; top: 0; color: var(--muted); background: #0d1c2e; font-size: 10px; text-transform: uppercase; letter-spacing: .8px; }
+    td:last-child { font-weight: 800; }
+    .ok { color: var(--green); }
+    .ko { color: var(--red); }
+    .empty-row td { padding: 20px; color: var(--muted); text-align: center; }
+
+    @media (max-width: 1120px) {
+      .topbar { grid-template-columns: 1fr; }
+      .controls { grid-template-columns: repeat(4, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="topbar">
+      <div class="brand">
+        <div class="brand-mark">SVG</div>
+        <div>
+          <h1>Ligne de production intelligente</h1>
+          <div class="subtitle">Source → Emballage → Contrôle qualité → Comptage → Tri</div>
+        </div>
+      </div>
+
+      <div class="controls" aria-label="Paramètres de simulation">
+        <div class="control-group">
+          <label for="speed">Vitesse</label>
+          <input id="speed" type="range" min="30" max="180" step="10" value="90">
+          <span class="control-value" id="speedValue">90 px/s</span>
+        </div>
+        <div class="control-group">
+          <label for="interval">Cadence source</label>
+          <input id="interval" type="range" min="1" max="10" step="0.5" value="5">
+          <span class="control-value" id="intervalValue">5,0 s</span>
+        </div>
+        <div class="control-group">
+          <label for="packTime">Emballage</label>
+          <input id="packTime" type="range" min="1" max="8" step="0.5" value="3">
+          <span class="control-value" id="packTimeValue">3,0 s</span>
+        </div>
+        <div class="control-group">
+          <label for="qualityTime">Contrôle</label>
+          <input id="qualityTime" type="range" min="0.5" max="6" step="0.5" value="2">
+          <span class="control-value" id="qualityTimeValue">2,0 s</span>
+        </div>
+        <div class="control-group">
+          <label for="defectRate">Défauts</label>
+          <input id="defectRate" type="range" min="0" max="60" step="1" value="20">
+          <span class="control-value" id="defectRateValue">20 %</span>
+        </div>
+        <div class="actions">
+          <button class="primary" id="startBtn">▶ Démarrer</button>
+          <button id="pauseBtn">Ⅱ Pause</button>
+          <button id="stopBtn">■ Stop</button>
+          <button id="resetBtn">↺ Reset compteur</button>
+          <button class="warning" id="faultBtn">⚠ Simuler une panne</button>
+          <button id="challengeBtn">◆ Mode défi</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="stage">
+      <svg id="factory" viewBox="0 0 1500 760" role="img" aria-label="Simulation d'une ligne de production industrielle">
+        <defs>
+          <filter id="glowCyan" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="6" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowGreen" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="7" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+            <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#000" flood-opacity=".38"/>
+          </filter>
+          <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse">
+            <line x1="36" y1="0" x2="36" y2="36" stroke="#183149" stroke-width="1" opacity=".26"/>
+            <line x1="0" y1="36" x2="36" y2="36" stroke="#183149" stroke-width="1" opacity=".26"/>
+          </pattern>
+        </defs>
+
+        <rect x="0" y="0" width="1500" height="760" fill="#081522"/>
+        <rect x="0" y="0" width="1500" height="760" fill="url(#grid)"/>
+
+        <!-- Dashboard SVG -->
+        <rect x="24" y="22" width="1452" height="122" rx="14" fill="#0c1d2e" stroke="#29445e"/>
+        <text x="48" y="51" fill="#7f9ab4" font-size="11" font-weight="700" letter-spacing="1.5">TABLEAU DE BORD TEMPS RÉEL</text>
+
+        <g transform="translate(48 68)">
+          <rect width="180" height="55" rx="9" fill="#10283d" stroke="#244864"/>
+          <text x="13" y="20" fill="#8ca7bd" font-size="10">PASSAGES TOTAL</text>
+          <text id="totalText" x="13" y="45" fill="#ffffff" font-size="23" font-weight="800">0</text>
+        </g>
+        <g transform="translate(240 68)">
+          <rect width="180" height="55" rx="9" fill="#10283d" stroke="#244864"/>
+          <text x="13" y="20" fill="#8ca7bd" font-size="10">CONFORMES</text>
+          <text id="goodText" x="13" y="45" fill="#33e18a" font-size="23" font-weight="800">0</text>
+        </g>
+        <g transform="translate(432 68)">
+          <rect width="180" height="55" rx="9" fill="#10283d" stroke="#244864"/>
+          <text x="13" y="20" fill="#8ca7bd" font-size="10">REJETS</text>
+          <text id="rejectText" x="13" y="45" fill="#ff5263" font-size="23" font-weight="800">0</text>
+        </g>
+        <g transform="translate(624 68)">
+          <rect width="180" height="55" rx="9" fill="#10283d" stroke="#244864"/>
+          <text x="13" y="20" fill="#8ca7bd" font-size="10">TAUX DE DÉFAUT</text>
+          <text id="rateText" x="13" y="45" fill="#ffae42" font-size="23" font-weight="800">0,0 %</text>
+        </g>
+        <g transform="translate(816 68)">
+          <rect width="180" height="55" rx="9" fill="#10283d" stroke="#244864"/>
+          <text x="13" y="20" fill="#8ca7bd" font-size="10">PRODUITS / MIN</text>
+          <text id="ppmText" x="13" y="45" fill="#29d9ff" font-size="23" font-weight="800">0</text>
+        </g>
+        <g transform="translate(1008 68)">
+          <rect width="180" height="55" rx="9" fill="#10283d" stroke="#244864"/>
+          <text x="13" y="20" fill="#8ca7bd" font-size="10">VITESSE CONVOYEUR</text>
+          <text id="dashSpeedText" x="13" y="45" fill="#ffffff" font-size="23" font-weight="800">90 px/s</text>
+        </g>
+        <g transform="translate(1200 68)">
+          <rect width="252" height="55" rx="9" fill="#10283d" stroke="#244864"/>
+          <circle id="statusLight" cx="21" cy="29" r="8" fill="#6f8497"/>
+          <text x="38" y="20" fill="#8ca7bd" font-size="10">ÉTAT DE LA LIGNE</text>
+          <text id="statusText" x="38" y="43" fill="#ffffff" font-size="14" font-weight="800">ARRÊTÉE</text>
+        </g>
+
+        <!-- Challenge -->
+        <g id="challengePanel" visibility="hidden">
+          <rect x="24" y="154" width="1452" height="48" rx="10" fill="#0e2438" stroke="#34708d"/>
+          <text x="48" y="183" fill="#e9f6ff" font-size="13" font-weight="800">DÉFI : 100 PRODUITS CONFORMES / 10 MIN</text>
+          <rect x="405" y="171" width="690" height="14" rx="7" fill="#07111d" stroke="#29445e"/>
+          <rect id="challengeBar" x="405" y="171" width="0" height="14" rx="7" fill="#33e18a"/>
+          <text id="challengeProgressText" x="1110" y="184" fill="#ffffff" font-size="12" font-weight="700">0 / 100</text>
+          <text id="challengeClock" x="1388" y="184" fill="#29d9ff" font-size="15" font-weight="800" text-anchor="end">10:00</text>
+        </g>
+
+        <!-- Main conveyor -->
+        <rect x="82" y="400" width="1330" height="92" rx="15" fill="#172736" stroke="#416079" stroke-width="2" filter="url(#shadow)"/>
+        <rect x="91" y="410" width="1312" height="57" rx="8" fill="#253849" stroke="#52718a"/>
+        <g opacity=".42">
+          <line class="belt-stripe" x1="80" y1="411" x2="128" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="160" y1="411" x2="208" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="240" y1="411" x2="288" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="320" y1="411" x2="368" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="400" y1="411" x2="448" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="480" y1="411" x2="528" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="560" y1="411" x2="608" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="640" y1="411" x2="688" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="720" y1="411" x2="768" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="800" y1="411" x2="848" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="880" y1="411" x2="928" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="960" y1="411" x2="1008" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="1040" y1="411" x2="1088" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="1120" y1="411" x2="1168" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="1200" y1="411" x2="1248" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="1280" y1="411" x2="1328" y2="467" stroke="#71889a" stroke-width="12"/>
+          <line class="belt-stripe" x1="1360" y1="411" x2="1408" y2="467" stroke="#71889a" stroke-width="12"/>
+        </g>
+        <line x1="95" y1="482" x2="1398" y2="482" stroke="#0b1118" stroke-width="8"/>
+        <g fill="#0a1118" stroke="#416079" stroke-width="3">
+          <circle cx="130" cy="492" r="20"/><circle cx="355" cy="492" r="20"/><circle cx="580" cy="492" r="20"/>
+          <circle cx="805" cy="492" r="20"/><circle cx="1030" cy="492" r="20"/><circle cx="1255" cy="492" r="20"/><circle cx="1370" cy="492" r="20"/>
+        </g>
+
+        <!-- Reject branch -->
+        <line x1="1010" y1="468" x2="1130" y2="616" stroke="#442733" stroke-width="50"/>
+        <line x1="1118" y1="616" x2="1370" y2="616" stroke="#442733" stroke-width="50"/>
+        <line x1="1010" y1="468" x2="1130" y2="616" stroke="#915061" stroke-width="2"/>
+        <line x1="1118" y1="616" x2="1370" y2="616" stroke="#915061" stroke-width="2"/>
+
+        <!-- Source -->
+        <g filter="url(#shadow)">
+          <rect x="38" y="274" width="150" height="118" rx="12" fill="#10283d" stroke="#377093" stroke-width="2"/>
+          <rect x="56" y="294" width="114" height="53" rx="8" fill="#07131f" stroke="#2e5874"/>
+          <line x1="74" y1="305" x2="152" y2="305" stroke="#29d9ff" stroke-width="3" opacity=".6"/>
+          <line x1="74" y1="318" x2="152" y2="318" stroke="#29d9ff" stroke-width="3" opacity=".42"/>
+          <line x1="74" y1="331" x2="132" y2="331" stroke="#29d9ff" stroke-width="3" opacity=".26"/>
+          <text x="113" y="370" fill="#e7f2ff" font-size="13" font-weight="800" text-anchor="middle">SOURCE</text>
+        </g>
+        <text id="sourceCountdown" x="113" y="258" fill="#29d9ff" font-size="12" font-weight="700" text-anchor="middle">Prochain : 5,0 s</text>
+
+        <!-- Packaging station -->
+        <g id="packStation" filter="url(#shadow)">
+          <rect id="packBody" x="435" y="244" width="240" height="152" rx="14" fill="#18324a" stroke="#4e718e" stroke-width="2"/>
+          <rect x="458" y="267" width="194" height="58" rx="8" fill="#091725" stroke="#355775"/>
+          <line x1="520" y1="325" x2="520" y2="400" stroke="#7793a9" stroke-width="9"/>
+          <line x1="590" y1="325" x2="590" y2="400" stroke="#7793a9" stroke-width="9"/>
+          <circle id="packLight" cx="641" cy="258" r="9" fill="#607387"/>
+          <text x="555" y="291" fill="#e7f2ff" font-size="14" font-weight="800" text-anchor="middle">EMBALLAGE</text>
+          <text id="packStatus" x="555" y="313" fill="#8ca7bd" font-size="11" text-anchor="middle">Disponible</text>
+        </g>
+        <text id="packQueueText" x="555" y="226" fill="#ffca73" font-size="12" font-weight="700" text-anchor="middle">En attente : 0</text>
+
+        <!-- Presence sensor -->
+        <g>
+          <line x1="392" y1="349" x2="392" y2="410" stroke="#338bb7" stroke-width="3"/>
+          <circle id="presenceSensor" cx="392" cy="348" r="9" fill="#2f90bd" stroke="#79dfff" stroke-width="2"/>
+          <line class="sensor-beam" x1="392" y1="358" x2="392" y2="460" stroke="#29d9ff" stroke-width="2" stroke-dasharray="5 5" opacity=".75"/>
+          <text x="392" y="335" fill="#75cce9" font-size="9" text-anchor="middle">CAPTEUR</text>
+        </g>
+
+        <!-- Quality station -->
+        <g id="qualityStation" filter="url(#shadow)">
+          <rect id="qualityBody" x="800" y="244" width="236" height="152" rx="14" fill="#18324a" stroke="#4e718e" stroke-width="2"/>
+          <rect x="822" y="267" width="192" height="58" rx="8" fill="#091725" stroke="#355775"/>
+          <circle id="qualityLight" cx="1002" cy="258" r="9" fill="#607387"/>
+          <line x1="849" y1="325" x2="849" y2="400" stroke="#7793a9" stroke-width="9"/>
+          <line x1="987" y1="325" x2="987" y2="400" stroke="#7793a9" stroke-width="9"/>
+          <text x="918" y="291" fill="#e7f2ff" font-size="14" font-weight="800" text-anchor="middle">CONTRÔLE QUALITÉ</text>
+          <text id="qualityStatus" x="918" y="313" fill="#8ca7bd" font-size="11" text-anchor="middle">Disponible</text>
+        </g>
+        <text id="qualityQueueText" x="918" y="226" fill="#ffca73" font-size="12" font-weight="700" text-anchor="middle">En attente : 0</text>
+
+        <!-- Counting sensor and indicator -->
+        <g>
+          <line x1="1125" y1="320" x2="1125" y2="408" stroke="#576d81" stroke-width="5"/>
+          <circle id="countLampHalo" cx="1125" cy="296" r="26" fill="#29d9ff" opacity="0"/>
+          <circle id="countLamp" cx="1125" cy="296" r="16" fill="#193145" stroke="#7090a7" stroke-width="3"/>
+          <line id="countBeam" x1="1125" y1="322" x2="1125" y2="470" stroke="#63788b" stroke-width="2" stroke-dasharray="6 5"/>
+          <text x="1125" y="260" fill="#e7f2ff" font-size="12" font-weight="800" text-anchor="middle">COMPTAGE</text>
+          <text id="countStationText" x="1125" y="349" fill="#8ca7bd" font-size="10" text-anchor="middle">0 passage</text>
+        </g>
+
+        <!-- Final stock -->
+        <g filter="url(#shadow)">
+          <rect x="1280" y="268" width="178" height="124" rx="12" fill="#12372c" stroke="#33e18a" stroke-width="2"/>
+          <line x1="1298" y1="292" x2="1440" y2="292" stroke="#33e18a" opacity=".5"/>
+          <line x1="1298" y1="320" x2="1440" y2="320" stroke="#33e18a" opacity=".35"/>
+          <line x1="1298" y1="348" x2="1440" y2="348" stroke="#33e18a" opacity=".2"/>
+          <text x="1369" y="373" fill="#8ff0bc" font-size="13" font-weight="800" text-anchor="middle">STOCK FINAL</text>
+        </g>
+        <text id="stockText" x="1369" y="252" fill="#33e18a" font-size="13" font-weight="800" text-anchor="middle">0 conforme</text>
+
+        <!-- Reject bin -->
+        <g filter="url(#shadow)">
+          <rect x="1280" y="644" width="178" height="86" rx="10" fill="#421e29" stroke="#ff5263" stroke-width="2"/>
+          <line x1="1292" y1="666" x2="1446" y2="666" stroke="#ff5263" opacity=".5"/>
+          <text x="1369" y="706" fill="#ff9aa5" font-size="13" font-weight="800" text-anchor="middle">BAC DE REJET</text>
+        </g>
+        <text id="binText" x="1369" y="628" fill="#ff5263" font-size="13" font-weight="800" text-anchor="middle">0 rejet</text>
+
+        <!-- Products are inserted here -->
+        <g id="productsLayer"></g>
+
+        <!-- Center message / alarm -->
+        <g id="messagePanel" visibility="hidden">
+          <rect id="messageBox" x="435" y="535" width="630" height="86" rx="14" fill="#3a1b25" stroke="#ff5263" stroke-width="2"/>
+          <circle id="messageLight" cx="475" cy="578" r="13" fill="#ff5263"/>
+          <text id="messageTitle" x="505" y="568" fill="#ffffff" font-size="16" font-weight="800">ARRÊT DE LA LIGNE</text>
+          <text id="messageText" x="505" y="591" fill="#ffb1b9" font-size="12">Défauts trop élevés</text>
+        </g>
+
+        <text x="32" y="744" fill="#526b80" font-size="10">SIMULATION SVG • Les identifiants suivent chaque produit • Seuil d'arrêt qualité : plus de 30 % après 5 contrôles</text>
+      </svg>
+    </section>
+
+    <section class="history-panel">
+      <div class="history-head">
+        <h2>Historique de traçabilité</h2>
+        <span>20 derniers passages au poste de comptage</span>
+      </div>
+      <div class="history-scroll">
+        <table>
+          <thead><tr><th>ID bouteille</th><th>Heure de passage</th><th>Niveau</th><th>Emballage</th><th>Diagnostic qualité</th></tr></thead>
+          <tbody id="historyBody"><tr class="empty-row"><td colspan="5">Aucune bouteille comptabilisée</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const $ = (id) => document.getElementById(id);
+      const svgNS = 'http://www.w3.org/2000/svg';
+
+      const config = {
+        speed: 90,
+        interval: 5,
+        packTime: 3,
+        qualityTime: 2,
+        defectProbability: 20
+      };
+
+      const sim = {
+        running: false,
+        paused: false,
+        fault: false,
+        faultReason: '',
+        lastFrame: performance.now(),
+        sourceElapsed: 0,
+        nextId: 1,
+        products: [],
+        packQueue: [],
+        qualityQueue: [],
+        packActive: null,
+        qualityActive: null,
+        lastQuality: null,
+        totals: { passages: 0, good: 0, reject: 0, packed: 0 },
+        passageTimes: [],
+        challenge: { active: false, elapsed: 0, target: 100, limit: 600, result: '' },
+        lightTimers: { count: 0, quality: 0, presence: 0 }
+      };
+
+      const els = {
+        factory: $('factory'), productsLayer: $('productsLayer'),
+        totalText: $('totalText'), goodText: $('goodText'), rejectText: $('rejectText'), rateText: $('rateText'),
+        ppmText: $('ppmText'), dashSpeedText: $('dashSpeedText'), statusText: $('statusText'), statusLight: $('statusLight'),
+        sourceCountdown: $('sourceCountdown'), packBody: $('packBody'), packLight: $('packLight'), packStatus: $('packStatus'),
+        packQueueText: $('packQueueText'), qualityBody: $('qualityBody'), qualityLight: $('qualityLight'),
+        qualityStatus: $('qualityStatus'), qualityQueueText: $('qualityQueueText'), presenceSensor: $('presenceSensor'),
+        countLamp: $('countLamp'), countLampHalo: $('countLampHalo'), countBeam: $('countBeam'), countStationText: $('countStationText'),
+        stockText: $('stockText'), binText: $('binText'), historyBody: $('historyBody'),
+        messagePanel: $('messagePanel'), messageBox: $('messageBox'), messageLight: $('messageLight'),
+        messageTitle: $('messageTitle'), messageText: $('messageText'),
+        challengePanel: $('challengePanel'), challengeBar: $('challengeBar'), challengeProgressText: $('challengeProgressText'),
+        challengeClock: $('challengeClock')
+      };
+
+      function svgEl(tag, attrs = {}) {
+        const node = document.createElementNS(svgNS, tag);
+        Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+        return node;
+      }
+
+      function formatNumber(value, decimals = 0) {
+        return Number(value).toLocaleString('fr-FR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+      }
+
+      function formatClock(seconds) {
+        const s = Math.max(0, Math.ceil(seconds));
+        return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+      }
+
+      function makeProduct() {
+        const id = sim.nextId++;
+        const hasDefect = Math.random() * 100 < config.defectProbability;
+        const possibleDefects = ['Sous-remplie', 'Vide', 'Bouchon absent', 'Fuite', 'Déformée'];
+        const defectType = hasDefect ? possibleDefects[Math.floor(Math.random() * possibleDefects.length)] : 'Aucun défaut';
+        let fillLevel = 92 + Math.floor(Math.random() * 9);
+        if (defectType === 'Sous-remplie') fillLevel = 35 + Math.floor(Math.random() * 36);
+        if (defectType === 'Vide') fillLevel = 0;
+        if (defectType === 'Fuite') fillLevel = 60 + Math.floor(Math.random() * 26);
+
+        const group = svgEl('g', { 'data-product-id': id, filter: 'url(#shadow)' });
+        const label = svgEl('text', {
+          x: 0, y: -42, fill: '#dcefff', 'font-size': 10, 'font-weight': 800, 'text-anchor': 'middle'
+        });
+        label.textContent = `P-${String(id).padStart(3, '0')}`;
+
+        const bottle = svgEl('g', { 'data-bottle': 'true' });
+        const liquidHeight = 31 * fillLevel / 100;
+        const liquid = svgEl('rect', {
+          x: -12, y: 18 - liquidHeight, width: 24, height: liquidHeight, rx: 3,
+          fill: '#28bdf2', opacity: .86
+        });
+        const liquidSurface = svgEl('line', {
+          x1: -11, y1: 18 - liquidHeight, x2: 11, y2: 18 - liquidHeight,
+          stroke: '#b8efff', 'stroke-width': 1, opacity: fillLevel ? .9 : 0
+        });
+        const body = svgEl('rect', {
+          x: -16, y: -17, width: 32, height: 38, rx: 9,
+          fill: '#bce7f5', 'fill-opacity': .20, stroke: '#a8d8e8', 'stroke-width': 2
+        });
+        const neck = svgEl('rect', {
+          x: -7, y: -28, width: 14, height: 13, rx: 3,
+          fill: '#bce7f5', 'fill-opacity': .22, stroke: '#a8d8e8', 'stroke-width': 2
+        });
+        const leftShoulder = svgEl('line', { x1: -7, y1: -16, x2: -14, y2: -10, stroke: '#a8d8e8', 'stroke-width': 2 });
+        const rightShoulder = svgEl('line', { x1: 7, y1: -16, x2: 14, y2: -10, stroke: '#a8d8e8', 'stroke-width': 2 });
+        const cap = svgEl('rect', {
+          x: -9, y: -34, width: 18, height: 7, rx: 2,
+          fill: '#375fda', stroke: '#9fb6ff', 'stroke-width': 1.5,
+          visibility: defectType === 'Bouchon absent' ? 'hidden' : 'visible'
+        });
+        const packageBand = svgEl('rect', {
+          x: -14, y: -3, width: 28, height: 11, rx: 2,
+          fill: '#e8f5ff', opacity: .82, visibility: 'hidden'
+        });
+        const levelText = svgEl('text', {
+          x: 0, y: 5, fill: fillLevel > 0 ? '#042538' : '#dcefff',
+          'font-size': 8, 'font-weight': 900, 'text-anchor': 'middle'
+        });
+        levelText.textContent = `${fillLevel}%`;
+        const defectMark = svgEl('line', {
+          x1: 5, y1: -3, x2: 14, y2: 8, stroke: '#ff5263', 'stroke-width': 2.5,
+          visibility: defectType === 'Fuite' ? 'visible' : 'hidden'
+        });
+        const qualityBadge = svgEl('circle', {
+          cx: 17, cy: -28, r: 5, fill: '#607387', stroke: '#dcefff', 'stroke-width': 1,
+          visibility: 'hidden'
+        });
+
+        bottle.append(liquid, liquidSurface, body, neck, leftShoulder, rightShoulder, cap, packageBand, levelText, defectMark, qualityBadge);
+        if (defectType === 'Déformée') bottle.setAttribute('transform', 'skewX(-10) scale(.88 1)');
+        group.append(label, bottle);
+        els.productsLayer.appendChild(group);
+
+        const product = {
+          id, x: 120, y: 438, state: 'toPack', timer: 0, packaged: false,
+          defective: hasDefect, defectType, fillLevel, counted: false,
+          element: group, bottle, body, cap, packageBand, qualityBadge,
+          waypoint: 0, route: []
+        };
+        sim.products.push(product);
+        updateProductTransform(product);
+        return product;
+      }
+
+      function updateProductTransform(product) {
+        product.element.setAttribute('transform', `translate(${product.x.toFixed(1)} ${product.y.toFixed(1)})`);
+      }
+
+      function setPackagedLook(product) {
+        product.packaged = true;
+        product.packageBand.setAttribute('visibility', 'visible');
+        product.body.setAttribute('stroke', '#d8f2ff');
+      }
+
+      function moveToward(product, tx, ty, distance) {
+        const dx = tx - product.x;
+        const dy = ty - product.y;
+        const length = Math.hypot(dx, dy);
+        if (length <= distance || length < .1) {
+          product.x = tx;
+          product.y = ty;
+          return true;
+        }
+        product.x += dx / length * distance;
+        product.y += dy / length * distance;
+        return false;
+      }
+
+      function beginPackaging(product) {
+        sim.packActive = product;
+        product.state = 'packaging';
+        product.x = 555;
+        product.y = 438;
+        product.timer = config.packTime;
+      }
+
+      function beginQuality(product) {
+        sim.qualityActive = product;
+        product.state = 'quality';
+        product.x = 918;
+        product.y = 438;
+        product.timer = config.qualityTime;
+      }
+
+      function dispatchQueues() {
+        if (!sim.packActive && sim.packQueue.length) beginPackaging(sim.packQueue.shift());
+        if (!sim.qualityActive && sim.qualityQueue.length) beginQuality(sim.qualityQueue.shift());
+      }
+
+      function pulse(name, duration = .65) {
+        sim.lightTimers[name] = duration;
+      }
+
+      function registerPassage(product) {
+        if (product.counted) return;
+        product.counted = true;
+        sim.totals.passages++;
+        if (product.defective) sim.totals.reject++;
+        else sim.totals.good++;
+        const now = Date.now();
+        sim.passageTimes.push(now);
+        pulse('count', .6);
+        addHistory(product, new Date(now));
+
+        const defectRate = sim.totals.passages ? sim.totals.reject / sim.totals.passages * 100 : 0;
+        if (sim.totals.passages >= 5 && defectRate > 30) {
+          triggerFault(`Taux de défaut critique : ${formatNumber(defectRate, 1)} %`);
+        }
+
+        if (sim.challenge.active && sim.totals.good >= sim.challenge.target) {
+          sim.challenge.result = 'success';
+          sim.challenge.active = false;
+          sim.running = false;
+          showMessage('DÉFI RÉUSSI', `100 produits conformes en ${formatClock(sim.challenge.elapsed)}`, 'success');
+        }
+      }
+
+      function addHistory(product, date) {
+        const empty = els.historyBody.querySelector('.empty-row');
+        if (empty) empty.remove();
+        const row = document.createElement('tr');
+        const result = product.defective ? `NON CONFORME — ${product.defectType}` : 'CONFORME — bouteille pleine';
+        row.innerHTML = `<td>P-${String(product.id).padStart(3, '0')}</td><td>${date.toLocaleTimeString('fr-FR')}</td><td>${product.fillLevel} %</td><td>Terminé</td><td class="${product.defective ? 'ko' : 'ok'}">${result}</td>`;
+        els.historyBody.prepend(row);
+        while (els.historyBody.rows.length > 20) els.historyBody.deleteRow(-1);
+      }
+
+      function finishQuality(product) {
+        product.state = 'toCount';
+        product.body.setAttribute('stroke', product.defective ? '#ff9eaa' : '#9cf2c5');
+        product.body.setAttribute('stroke-width', '3');
+        product.qualityBadge.setAttribute('visibility', 'visible');
+        product.qualityBadge.setAttribute('fill', product.defective ? '#ff5263' : '#33e18a');
+        sim.lastQuality = product;
+        pulse('quality', .9);
+        sim.qualityActive = null;
+      }
+
+      function completeProduct(product) {
+        product.state = 'done';
+        setTimeout(() => product.element.remove(), 700);
+      }
+
+      function updateProducts(dt) {
+        const distance = config.speed * dt;
+        for (const product of sim.products) {
+          if (product.state === 'toPack') {
+            if (moveToward(product, 405, 438, distance)) {
+              pulse('presence', .35);
+              if (!sim.packActive) beginPackaging(product);
+              else { product.state = 'waitPack'; sim.packQueue.push(product); }
+            }
+          } else if (product.state === 'packaging') {
+            product.timer -= dt;
+            if (product.timer <= 0) {
+              setPackagedLook(product);
+              sim.totals.packed++;
+              product.state = 'toQuality';
+              sim.packActive = null;
+            }
+          } else if (product.state === 'toQuality') {
+            if (moveToward(product, 772, 438, distance)) {
+              if (!sim.qualityActive) beginQuality(product);
+              else { product.state = 'waitQuality'; sim.qualityQueue.push(product); }
+            }
+          } else if (product.state === 'quality') {
+            product.timer -= dt;
+            if (product.timer <= 0) finishQuality(product);
+          } else if (product.state === 'toCount') {
+            if (moveToward(product, 1125, 438, distance)) {
+              registerPassage(product);
+              if (product.defective) {
+                product.state = 'toReject';
+                product.route = [{ x: 1150, y: 500 }, { x: 1230, y: 616 }, { x: 1365, y: 616 }];
+              } else {
+                product.state = 'toStock';
+              }
+            }
+          } else if (product.state === 'toStock') {
+            if (moveToward(product, 1365, 438, distance)) completeProduct(product);
+          } else if (product.state === 'toReject') {
+            const target = product.route[product.waypoint];
+            if (moveToward(product, target.x, target.y, distance)) {
+              product.waypoint++;
+              if (product.waypoint >= product.route.length) completeProduct(product);
+            }
+          }
+          updateProductTransform(product);
+        }
+
+        sim.products = sim.products.filter((p) => p.state !== 'done');
+        positionQueues();
+        dispatchQueues();
+      }
+
+      function positionQueues() {
+        sim.packQueue.forEach((p, index) => {
+          const targetX = Math.max(215, 405 - index * 48);
+          p.x += (targetX - p.x) * .12;
+          p.y = 438;
+        });
+        sim.qualityQueue.forEach((p, index) => {
+          const targetX = Math.max(690, 772 - index * 48);
+          p.x += (targetX - p.x) * .12;
+          p.y = 438;
+        });
+      }
+
+      function updateMachineVisuals() {
+        const packBusy = Boolean(sim.packActive);
+        const packSaturated = sim.packQueue.length >= 3;
+        els.packBody.setAttribute('fill', packSaturated ? '#603d13' : packBusy ? '#164767' : '#18324a');
+        els.packBody.setAttribute('stroke', packSaturated ? '#ffae42' : packBusy ? '#29d9ff' : '#4e718e');
+        els.packLight.setAttribute('fill', packSaturated ? '#ffae42' : packBusy ? '#29d9ff' : '#607387');
+        els.packStatus.textContent = packSaturated ? 'SATURÉE — goulot' : packBusy ? `Emballage en cours • ${formatNumber(sim.packActive.timer, 1)} s` : 'Disponible';
+        els.packStatus.setAttribute('fill', packSaturated ? '#ffd08a' : packBusy ? '#82eaff' : '#8ca7bd');
+
+        const qualityBusy = Boolean(sim.qualityActive);
+        const qualitySaturated = sim.qualityQueue.length >= 3;
+        els.qualityBody.setAttribute('fill', qualitySaturated ? '#603d13' : qualityBusy ? '#173f37' : '#18324a');
+        els.qualityBody.setAttribute('stroke', qualitySaturated ? '#ffae42' : qualityBusy ? '#33e18a' : '#4e718e');
+        const lastDiagnosis = sim.lastQuality?.defective ? `Défaut : ${sim.lastQuality.defectType}` : 'Bouteille pleine — conforme';
+        els.qualityStatus.textContent = qualitySaturated ? 'SATURÉE — goulot' : qualityBusy ? `Contrôle en cours • ${formatNumber(sim.qualityActive.timer, 1)} s` : sim.lightTimers.quality > 0 ? lastDiagnosis : 'Disponible';
+        els.qualityStatus.setAttribute('fill', qualitySaturated ? '#ffd08a' : qualityBusy ? '#94f2c0' : '#8ca7bd');
+        els.packQueueText.textContent = `En attente : ${sim.packQueue.length}`;
+        els.qualityQueueText.textContent = `En attente : ${sim.qualityQueue.length}`;
+      }
+
+      function updateLights(dt) {
+        for (const key of Object.keys(sim.lightTimers)) sim.lightTimers[key] = Math.max(0, sim.lightTimers[key] - dt);
+
+        const countOn = sim.lightTimers.count > 0;
+        els.countLamp.setAttribute('fill', countOn ? '#29d9ff' : '#193145');
+        els.countLamp.setAttribute('stroke', countOn ? '#c1f5ff' : '#7090a7');
+        els.countLamp.setAttribute('filter', countOn ? 'url(#glowCyan)' : 'none');
+        els.countLampHalo.setAttribute('opacity', countOn ? '.22' : '0');
+        els.countBeam.setAttribute('stroke', countOn ? '#29d9ff' : '#63788b');
+
+        if (sim.lightTimers.quality > 0 && sim.qualityActive === null) {
+          els.qualityLight.setAttribute('fill', sim.lastQuality?.defective ? '#ff5263' : '#33e18a');
+          els.qualityLight.setAttribute('filter', 'url(#glowGreen)');
+        } else {
+          els.qualityLight.setAttribute('fill', sim.qualityActive ? '#ffae42' : '#607387');
+          els.qualityLight.setAttribute('filter', 'none');
+        }
+
+        els.presenceSensor.setAttribute('fill', sim.lightTimers.presence > 0 ? '#7eeeff' : '#2f90bd');
+        els.presenceSensor.setAttribute('filter', sim.lightTimers.presence > 0 ? 'url(#glowCyan)' : 'none');
+      }
+
+      function updateDashboard() {
+        const now = Date.now();
+        sim.passageTimes = sim.passageTimes.filter((time) => now - time <= 60000);
+        const defectRate = sim.totals.passages ? sim.totals.reject / sim.totals.passages * 100 : 0;
+        els.totalText.textContent = sim.totals.passages;
+        els.goodText.textContent = sim.totals.good;
+        els.rejectText.textContent = sim.totals.reject;
+        els.rateText.textContent = `${formatNumber(defectRate, 1)} %`;
+        els.rateText.setAttribute('fill', defectRate > 30 ? '#ff5263' : '#ffae42');
+        els.ppmText.textContent = sim.passageTimes.length;
+        els.dashSpeedText.textContent = `${config.speed} px/s`;
+        els.countStationText.textContent = `${sim.totals.passages} passage${sim.totals.passages > 1 ? 's' : ''}`;
+        els.stockText.textContent = `${sim.totals.good} conforme${sim.totals.good > 1 ? 's' : ''}`;
+        els.binText.textContent = `${sim.totals.reject} rejet${sim.totals.reject > 1 ? 's' : ''}`;
+
+        let status = 'ARRÊTÉE', color = '#6f8497';
+        if (sim.fault) { status = 'EN PANNE'; color = '#ff5263'; }
+        else if (sim.paused) { status = 'EN PAUSE'; color = '#ffae42'; }
+        else if (sim.running) { status = 'EN PRODUCTION'; color = '#33e18a'; }
+        els.statusText.textContent = status;
+        els.statusLight.setAttribute('fill', color);
+        els.statusLight.setAttribute('filter', sim.running && !sim.paused ? 'url(#glowGreen)' : 'none');
+        els.factory.classList.toggle('paused', sim.paused);
+        els.factory.classList.toggle('stopped', !sim.running);
+        els.factory.classList.toggle('fault', sim.fault);
+
+        const remaining = Math.max(0, config.interval - sim.sourceElapsed);
+        els.sourceCountdown.textContent = sim.running && !sim.paused && !sim.fault ? `Prochain : ${formatNumber(remaining, 1)} s` : 'Source inactive';
+        updateMachineVisuals();
+      }
+
+      function updateChallenge(dt) {
+        if (!sim.challenge.active) return;
+        sim.challenge.elapsed += dt;
+        const remaining = sim.challenge.limit - sim.challenge.elapsed;
+        const progress = Math.min(1, sim.totals.good / sim.challenge.target);
+        els.challengeBar.setAttribute('width', String(690 * progress));
+        els.challengeProgressText.textContent = `${sim.totals.good} / ${sim.challenge.target}`;
+        els.challengeClock.textContent = formatClock(remaining);
+        if (remaining <= 0 && sim.totals.good < sim.challenge.target) {
+          sim.challenge.active = false;
+          sim.challenge.result = 'failed';
+          sim.running = false;
+          showMessage('DÉFI ÉCHOUÉ', `${sim.totals.good} produit(s) conforme(s) en 10:00`, 'error');
+        }
+      }
+
+      function showMessage(title, message, type = 'error') {
+        const success = type === 'success';
+        els.messagePanel.setAttribute('visibility', 'visible');
+        els.messageBox.setAttribute('fill', success ? '#12372c' : '#3a1b25');
+        els.messageBox.setAttribute('stroke', success ? '#33e18a' : '#ff5263');
+        els.messageLight.setAttribute('fill', success ? '#33e18a' : '#ff5263');
+        els.messageLight.setAttribute('class', success ? '' : 'alarm-pulse');
+        els.messageTitle.textContent = title;
+        els.messageText.textContent = message;
+        els.messageText.setAttribute('fill', success ? '#a6f2c9' : '#ffb1b9');
+      }
+
+      function hideMessage() {
+        els.messagePanel.setAttribute('visibility', 'hidden');
+        els.messageLight.removeAttribute('class');
+      }
+
+      function triggerFault(reason = 'Arrêt machine simulé par l’opérateur') {
+        sim.fault = true;
+        sim.faultReason = reason;
+        sim.running = false;
+        sim.paused = false;
+        showMessage('ARRÊT DE LA LIGNE', reason, 'error');
+        updateDashboard();
+      }
+
+      function start() {
+        sim.fault = false;
+        sim.faultReason = '';
+        sim.paused = false;
+        sim.running = true;
+        $('pauseBtn').textContent = 'Ⅱ Pause';
+        hideMessage();
+        sim.lastFrame = performance.now();
+        updateDashboard();
+      }
+
+      function stop() {
+        sim.running = false;
+        sim.paused = false;
+        $('pauseBtn').textContent = 'Ⅱ Pause';
+        updateDashboard();
+      }
+
+      function togglePause() {
+        if (sim.fault || (!sim.running && !sim.paused)) return;
+        sim.paused = !sim.paused;
+        sim.running = !sim.paused;
+        $('pauseBtn').textContent = sim.paused ? '▶ Reprendre' : 'Ⅱ Pause';
+        sim.lastFrame = performance.now();
+        updateDashboard();
+      }
+
+      function resetCounters({ clearProducts = false } = {}) {
+        sim.totals = { passages: 0, good: 0, reject: 0, packed: 0 };
+        sim.passageTimes = [];
+        els.historyBody.innerHTML = '<tr class="empty-row"><td colspan="5">Aucune bouteille comptabilisée</td></tr>';
+        if (clearProducts) {
+          sim.products.forEach((p) => p.element.remove());
+          sim.products = [];
+          sim.packQueue = [];
+          sim.qualityQueue = [];
+          sim.packActive = null;
+          sim.qualityActive = null;
+          sim.lastQuality = null;
+          sim.sourceElapsed = 0;
+          sim.nextId = 1;
+        }
+        hideMessage();
+        sim.fault = false;
+        updateDashboard();
+      }
+
+      function startChallenge() {
+        resetCounters({ clearProducts: true });
+        sim.challenge = { active: true, elapsed: 0, target: 100, limit: 600, result: '' };
+        els.challengePanel.setAttribute('visibility', 'visible');
+        els.challengeBar.setAttribute('width', '0');
+        els.challengeProgressText.textContent = '0 / 100';
+        els.challengeClock.textContent = '10:00';
+        start();
+      }
+
+      function bindRange(id, key, valueId, formatter) {
+        const input = $(id);
+        const output = $(valueId);
+        input.addEventListener('input', () => {
+          config[key] = Number(input.value);
+          output.textContent = formatter(config[key]);
+          updateDashboard();
+        });
+      }
+
+      bindRange('speed', 'speed', 'speedValue', (v) => `${v} px/s`);
+      bindRange('interval', 'interval', 'intervalValue', (v) => `${formatNumber(v, 1)} s`);
+      bindRange('packTime', 'packTime', 'packTimeValue', (v) => `${formatNumber(v, 1)} s`);
+      bindRange('qualityTime', 'qualityTime', 'qualityTimeValue', (v) => `${formatNumber(v, 1)} s`);
+      bindRange('defectRate', 'defectProbability', 'defectRateValue', (v) => `${v} %`);
+
+      $('startBtn').addEventListener('click', start);
+      $('pauseBtn').addEventListener('click', togglePause);
+      $('stopBtn').addEventListener('click', stop);
+      $('resetBtn').addEventListener('click', () => resetCounters());
+      $('faultBtn').addEventListener('click', () => triggerFault());
+      $('challengeBtn').addEventListener('click', startChallenge);
+
+      function frame(now) {
+        const rawDt = (now - sim.lastFrame) / 1000;
+        const dt = Math.min(rawDt, .05);
+        sim.lastFrame = now;
+
+        if (sim.running && !sim.paused && !sim.fault) {
+          sim.sourceElapsed += dt;
+          while (sim.sourceElapsed >= config.interval) {
+            sim.sourceElapsed -= config.interval;
+            makeProduct();
+          }
+          updateProducts(dt);
+          updateLights(dt);
+          updateChallenge(dt);
+        }
+        updateDashboard();
+        requestAnimationFrame(frame);
+      }
+
+      updateDashboard();
+      requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
