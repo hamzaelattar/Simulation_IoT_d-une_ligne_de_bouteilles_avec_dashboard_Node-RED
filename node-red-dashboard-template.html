@@ -1,0 +1,312 @@
+<style>
+  /* Libérer le panneau plein écran des conteneurs du dashboard classique. */
+  body :has(> .bottle-dashboard),
+  ui-card-panel:has(.bottle-dashboard),
+  .nr-dashboard-cardpanel:has(.bottle-dashboard),
+  md-card:has(.bottle-dashboard),
+  md-content:has(.bottle-dashboard) {
+    transform: none !important;
+    filter: none !important;
+    perspective: none !important;
+    contain: none !important;
+    overflow: visible !important;
+  }
+
+  .bottle-dashboard {
+    --bd-muted: #a8bcd0;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    color: #edf5ff;
+    background: #0b1625;
+    border: 0;
+    border-radius: 0;
+    padding: clamp(16px, 3vw, 48px);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    box-sizing: border-box;
+  }
+
+  .bottle-dashboard * {
+    box-sizing: border-box;
+  }
+
+  .bottle-dashboard .bd-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 22px;
+  }
+
+  .bottle-dashboard .bd-eyebrow {
+    color: #64cfff;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .bottle-dashboard h2 {
+    margin: 6px 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #edf5ff;
+  }
+
+  .bottle-dashboard .bd-subtitle {
+    margin: 0;
+    color: var(--bd-muted);
+    font-size: 12px;
+  }
+
+  .bottle-dashboard .bd-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 13px;
+    border: 1px solid currentColor;
+    border-radius: 24px;
+    color: #bdcbd9;
+    background: #1a2a3c;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .bottle-dashboard .bd-state::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .bottle-dashboard .bd-running {
+    color: #69e4aa;
+    background: #12372e;
+  }
+
+  .bottle-dashboard .bd-paused {
+    color: #ffd180;
+    background: #382e1d;
+  }
+
+  .bottle-dashboard .bd-fault {
+    color: #ff9baa;
+    background: #402330;
+  }
+
+  .bottle-dashboard .bd-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .bottle-dashboard .bd-card {
+    min-width: 0;
+    padding: 17px;
+    border: 1px solid #2b4057;
+    border-radius: 12px;
+    background: #132337;
+  }
+
+  .bottle-dashboard .bd-label {
+    color: var(--bd-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .bottle-dashboard .bd-value {
+    display: block;
+    margin: 12px 0 6px;
+    font-size: clamp(32px, 3.2vw, 54px);
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  .bottle-dashboard .bd-note {
+    color: var(--bd-muted);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .bottle-dashboard .bd-green {
+    color: #69e4aa;
+  }
+
+  .bottle-dashboard .bd-red {
+    color: #ff9baa;
+  }
+
+  .bottle-dashboard .bd-blue {
+    color: #64cfff;
+  }
+
+  .bottle-dashboard .bd-orange {
+    color: #ffd180;
+  }
+
+  .bottle-dashboard .bd-unit {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--bd-muted);
+  }
+
+  .bottle-dashboard .bd-section {
+    margin: 22px 0 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #edf5ff;
+  }
+
+  .bottle-dashboard .bd-two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bottle-dashboard .bd-meter {
+    width: 100%;
+    height: 10px;
+    margin: 10px 0;
+    border: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #293b50;
+    accent-color: #ffd180;
+  }
+
+  .bottle-dashboard .bd-meter::-webkit-progress-bar {
+    background: #293b50;
+  }
+
+  .bottle-dashboard .bd-meter::-webkit-progress-value {
+    background: #ffd180;
+    border-radius: 10px;
+  }
+
+  .bottle-dashboard .bd-meter::-moz-progress-bar {
+    background: #ffd180;
+  }
+
+  .bottle-dashboard .bd-alert {
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 8px;
+    background: #402330;
+    color: #ffb8c3;
+    font-size: 12px;
+  }
+
+  .bottle-dashboard .bd-footer {
+    margin-top: 20px;
+    border-top: 1px solid #29405a;
+    padding-top: 14px;
+    color: var(--bd-muted);
+    font-size: 11px;
+    line-height: 1.7;
+  }
+
+  .bottle-dashboard .bd-empty {
+    padding: 36px 12px;
+    text-align: center;
+  }
+
+  @media (max-width: 700px) {
+    .bottle-dashboard .bd-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 400px) {
+    .bottle-dashboard {
+      padding: 14px;
+    }
+
+    .bottle-dashboard .bd-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="bottle-dashboard" role="region" aria-label="Dashboard de la ligne de bouteilles" tabindex="0">
+  <header class="bd-header">
+    <div>
+      <div class="bd-eyebrow">Supervision industrielle</div>
+      <h2>Ligne de bouteilles</h2>
+      <p class="bd-subtitle">Production · Qualité · Flux des postes</p>
+    </div>
+    <span ng-if="msg.payload" class="bd-state" ng-class="{'bd-running': msg.payload.statut === 'EN PRODUCTION', 'bd-paused': msg.payload.statut === 'EN PAUSE', 'bd-fault': msg.payload.statut === 'EN PANNE'}">{{msg.payload.statut || 'INCONNU'}}</span>
+  </header>
+
+  <div ng-if="!msg.payload" class="bd-empty">
+    <h2>En attente de données</h2>
+    <p class="bd-subtitle">Ouvrez le simulateur pour recevoir les indicateurs de la ligne.</p>
+  </div>
+
+  <section ng-if="msg.payload">
+    <div class="bd-grid">
+      <div class="bd-card">
+        <div class="bd-label">PASSAGES TOTAL</div>
+        <strong class="bd-value">{{msg.payload.passages | number:0}}</strong><span class="bd-note">Bouteilles comptabilisées</span>
+      </div>
+      <div class="bd-card">
+        <div class="bd-label">CONFORMES</div>
+        <strong class="bd-value bd-green">{{msg.payload.conformes | number:0}}</strong><span class="bd-note">Qualité validée</span>
+      </div>
+      <div class="bd-card">
+        <div class="bd-label">REJETS</div>
+        <strong class="bd-value bd-red">{{msg.payload.rejets | number:0}}</strong><span class="bd-note">Bouteilles non conformes</span>
+      </div>
+      <div class="bd-card">
+        <div class="bd-label">EMBALLÉS</div>
+        <strong class="bd-value bd-blue">{{msg.payload.emballes | number:0}}</strong><span class="bd-note">Emballage terminé</span>
+      </div>
+    </div>
+
+    <h3 class="bd-section">Performance de la ligne</h3>
+    <div class="bd-grid bd-two">
+      <div class="bd-card">
+        <div class="bd-label">TAUX DE DÉFAUT</div>
+        <strong class="bd-value bd-orange" ng-class="{'bd-red': msg.payload.tauxDefaut > 30}">{{msg.payload.tauxDefaut | number:1}} <span class="bd-unit">%</span></strong>
+        <progress class="bd-meter" max="100" ng-attr-value="{{msg.payload.tauxDefaut}}"
+          aria-label="Taux de défaut en pourcentage"></progress>
+        <div class="bd-note">Seuil d’arrêt : plus de 30 % après 5 passages.</div>
+        <div class="bd-alert" ng-if="msg.payload.passages >= 5 && msg.payload.tauxDefaut > 30">Seuil de défaut dépassé
+        </div>
+      </div>
+      <div class="bd-card">
+        <div class="bd-label">DÉBIT MESURÉ</div>
+        <strong class="bd-value bd-blue">{{msg.payload.produitsParMinute | number:0}} <span class="bd-unit">bouteilles/min</span></strong>
+        <div class="bd-note">Passages sur les 60 dernières secondes</div>
+        <div class="bd-section">Vitesse convoyeur : {{msg.payload.vitesse | number:0}} <span class="bd-unit">px/s</span>
+        </div>
+        <div class="bd-note">Consigne du simulateur</div>
+      </div>
+    </div>
+
+    <h3 class="bd-section">Files d’attente</h3>
+    <div class="bd-grid bd-two">
+      <div class="bd-card">
+        <div class="bd-label">POSTE EMBALLAGE</div>
+        <strong class="bd-value" ng-class="{'bd-orange': msg.payload.attenteEmballage >= 3}">{{msg.payload.attenteEmballage | number:0}} <span class="bd-unit">en attente</span></strong>
+        <span class="bd-note">{{msg.payload.attenteEmballage >= 3 ? 'Poste saturé — accumulation de bouteilles' : 'File fluide'}}</span>
+      </div>
+      <div class="bd-card">
+        <div class="bd-label">POSTE CONTRÔLE QUALITÉ</div>
+        <strong class="bd-value" ng-class="{'bd-orange': msg.payload.attenteControle >= 3}">{{msg.payload.attenteControle | number:0}} <span class="bd-unit">en attente</span></strong>
+        <span class="bd-note">{{msg.payload.attenteControle >= 3 ? 'Poste saturé — accumulation de bouteilles' : 'File fluide'}}</span>
+      </div>
+    </div>
+    <footer class="bd-footer">
+      Dernière réception : <strong>{{msg.payload.timestamp | date:'dd/MM/yyyy HH:mm:ss'}}</strong><br>
+      Dernier état reçu. Si le simulateur est fermé, les valeurs restent affichées.
+    </footer>
+  </section>
+</div>

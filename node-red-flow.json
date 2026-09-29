@@ -1,0 +1,127 @@
+[
+  {
+    "id": "52c76f4166d1a2c5",
+    "type": "tab",
+    "label": "Monitoring bouteilles",
+    "disabled": false,
+    "info": "Dashboard classique node-red-dashboard 3.6.6. POST JSON /api/telemetry."
+  },
+  {
+    "id": "7ec73bd47a0265bc",
+    "type": "http in",
+    "z": "52c76f4166d1a2c5",
+    "name": "Télémétrie",
+    "url": "/api/telemetry",
+    "method": "post",
+    "upload": false,
+    "skipBodyParsing": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 140,
+    "wires": [
+      [
+        "395b042075766c5b"
+      ]
+    ]
+  },
+  {
+    "id": "395b042075766c5b",
+    "type": "function",
+    "z": "52c76f4166d1a2c5",
+    "name": "Valider et répondre",
+    "func": "let data = msg.payload;\nmsg.headers = {\n  'Content-Type': 'application/json',\n  'Access-Control-Allow-Origin': '*'\n};\n// Accepter le JSON envoyé comme text/plain par le simulateur.\nif (typeof data === 'string') {\n  try { data = JSON.parse(data); }\n  catch (error) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'JSON invalide' };\n    return [null, msg];\n  }\n}\nif (!data || typeof data !== 'object' || Array.isArray(data)) {\n  msg.statusCode = 400;\n  msg.payload = { ok: false, error: 'Objet JSON attendu' };\n  return [null, msg];\n}\nconst telemetry = { timestamp: new Date().toISOString() };\nconst fields = ['passages', 'conformes', 'rejets', 'emballes', 'tauxDefaut',\n  'produitsParMinute', 'vitesse', 'attenteEmballage', 'attenteControle'];\nfor (const field of fields) {\n  const value = data[field] ?? 0;\n  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'Champ invalide : ' + field };\n    return [null, msg];\n  }\n  telemetry[field] = value;\n}\ntelemetry.statut = typeof data.statut === 'string' ? data.statut : 'INCONNU';\nconst dashboardMsg = { topic: 'ligne', payload: telemetry };\n// Garder le message HTTP original pour conserver req et res.\nmsg.statusCode = 200;\nmsg.payload = { ok: true };\nreturn [dashboardMsg, msg];",
+    "outputs": 2,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 140,
+    "wires": [
+      [
+        "ec399dca8ea41a70",
+        "cd22eae94373654c"
+      ],
+      [
+        "b0b83c0a50d2af30"
+      ]
+    ]
+  },
+  {
+    "id": "ec399dca8ea41a70",
+    "type": "ui_template",
+    "z": "52c76f4166d1a2c5",
+    "group": "bottle-group",
+    "name": "Indicateurs ligne",
+    "order": 1,
+    "width": 6,
+    "height": 12,
+    "format": "<style>\n  /* Libérer le panneau plein écran des conteneurs du dashboard classique. */\n  body :has(> .bottle-dashboard),\n  ui-card-panel:has(.bottle-dashboard),\n  .nr-dashboard-cardpanel:has(.bottle-dashboard),\n  md-card:has(.bottle-dashboard),\n  md-content:has(.bottle-dashboard) {\n    transform: none !important;\n    filter: none !important;\n    perspective: none !important;\n    contain: none !important;\n    overflow: visible !important;\n  }\n\n  .bottle-dashboard {\n    --bd-muted: #a8bcd0;\n    position: fixed;\n    inset: 0;\n    z-index: 1000;\n    width: 100%;\n    height: 100vh;\n    height: 100dvh;\n    overflow-y: auto;\n    overflow-x: hidden;\n    overscroll-behavior: contain;\n    color: #edf5ff;\n    background: #0b1625;\n    border: 0;\n    border-radius: 0;\n    padding: clamp(16px, 3vw, 48px);\n    font-family: 'Segoe UI', Arial, sans-serif;\n    box-sizing: border-box;\n  }\n\n  .bottle-dashboard * {\n    box-sizing: border-box;\n  }\n\n  .bottle-dashboard .bd-header {\n    display: flex;\n    flex-wrap: wrap;\n    gap: 16px;\n    align-items: center;\n    justify-content: space-between;\n    margin-bottom: 22px;\n  }\n\n  .bottle-dashboard .bd-eyebrow {\n    color: #64cfff;\n    font-size: 10px;\n    font-weight: 700;\n    letter-spacing: 2px;\n    text-transform: uppercase;\n  }\n\n  .bottle-dashboard h2 {\n    margin: 6px 0;\n    font-size: 22px;\n    font-weight: 700;\n    color: #edf5ff;\n  }\n\n  .bottle-dashboard .bd-subtitle {\n    margin: 0;\n    color: var(--bd-muted);\n    font-size: 12px;\n  }\n\n  .bottle-dashboard .bd-state {\n    display: inline-flex;\n    align-items: center;\n    gap: 8px;\n    padding: 10px 13px;\n    border: 1px solid currentColor;\n    border-radius: 24px;\n    color: #bdcbd9;\n    background: #1a2a3c;\n    font-size: 11px;\n    font-weight: 700;\n  }\n\n  .bottle-dashboard .bd-state::before {\n    content: '';\n    width: 8px;\n    height: 8px;\n    border-radius: 50%;\n    background: currentColor;\n  }\n\n  .bottle-dashboard .bd-running {\n    color: #69e4aa;\n    background: #12372e;\n  }\n\n  .bottle-dashboard .bd-paused {\n    color: #ffd180;\n    background: #382e1d;\n  }\n\n  .bottle-dashboard .bd-fault {\n    color: #ff9baa;\n    background: #402330;\n  }\n\n  .bottle-dashboard .bd-grid {\n    display: grid;\n    grid-template-columns: repeat(4, minmax(0, 1fr));\n    gap: 12px;\n  }\n\n  .bottle-dashboard .bd-card {\n    min-width: 0;\n    padding: 17px;\n    border: 1px solid #2b4057;\n    border-radius: 12px;\n    background: #132337;\n  }\n\n  .bottle-dashboard .bd-label {\n    color: var(--bd-muted);\n    font-size: 11px;\n    font-weight: 600;\n  }\n\n  .bottle-dashboard .bd-value {\n    display: block;\n    margin: 12px 0 6px;\n    font-size: clamp(32px, 3.2vw, 54px);\n    font-weight: 700;\n    line-height: 1.1;\n    font-variant-numeric: tabular-nums;\n    overflow-wrap: anywhere;\n  }\n\n  .bottle-dashboard .bd-note {\n    color: var(--bd-muted);\n    font-size: 11px;\n    line-height: 1.5;\n  }\n\n  .bottle-dashboard .bd-green {\n    color: #69e4aa;\n  }\n\n  .bottle-dashboard .bd-red {\n    color: #ff9baa;\n  }\n\n  .bottle-dashboard .bd-blue {\n    color: #64cfff;\n  }\n\n  .bottle-dashboard .bd-orange {\n    color: #ffd180;\n  }\n\n  .bottle-dashboard .bd-unit {\n    font-size: 13px;\n    font-weight: 400;\n    color: var(--bd-muted);\n  }\n\n  .bottle-dashboard .bd-section {\n    margin: 22px 0 12px;\n    font-size: 12px;\n    font-weight: 700;\n    color: #edf5ff;\n  }\n\n  .bottle-dashboard .bd-two {\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n  }\n\n  .bottle-dashboard .bd-meter {\n    width: 100%;\n    height: 10px;\n    margin: 10px 0;\n    border: 0;\n    border-radius: 10px;\n    overflow: hidden;\n    background: #293b50;\n    accent-color: #ffd180;\n  }\n\n  .bottle-dashboard .bd-meter::-webkit-progress-bar {\n    background: #293b50;\n  }\n\n  .bottle-dashboard .bd-meter::-webkit-progress-value {\n    background: #ffd180;\n    border-radius: 10px;\n  }\n\n  .bottle-dashboard .bd-meter::-moz-progress-bar {\n    background: #ffd180;\n  }\n\n  .bottle-dashboard .bd-alert {\n    margin-top: 12px;\n    padding: 10px;\n    border-radius: 8px;\n    background: #402330;\n    color: #ffb8c3;\n    font-size: 12px;\n  }\n\n  .bottle-dashboard .bd-footer {\n    margin-top: 20px;\n    border-top: 1px solid #29405a;\n    padding-top: 14px;\n    color: var(--bd-muted);\n    font-size: 11px;\n    line-height: 1.7;\n  }\n\n  .bottle-dashboard .bd-empty {\n    padding: 36px 12px;\n    text-align: center;\n  }\n\n  @media (max-width: 700px) {\n    .bottle-dashboard .bd-grid {\n      grid-template-columns: repeat(2, minmax(0, 1fr));\n    }\n  }\n\n  @media (max-width: 400px) {\n    .bottle-dashboard {\n      padding: 14px;\n    }\n\n    .bottle-dashboard .bd-grid {\n      grid-template-columns: 1fr;\n    }\n  }\n</style>\n\n<div class=\"bottle-dashboard\" role=\"region\" aria-label=\"Dashboard de la ligne de bouteilles\" tabindex=\"0\">\n  <header class=\"bd-header\">\n    <div>\n      <div class=\"bd-eyebrow\">Supervision industrielle</div>\n      <h2>Ligne de bouteilles</h2>\n      <p class=\"bd-subtitle\">Production · Qualité · Flux des postes</p>\n    </div>\n    <span ng-if=\"msg.payload\" class=\"bd-state\" ng-class=\"{'bd-running': msg.payload.statut === 'EN PRODUCTION', 'bd-paused': msg.payload.statut === 'EN PAUSE', 'bd-fault': msg.payload.statut === 'EN PANNE'}\">{{msg.payload.statut || 'INCONNU'}}</span>\n  </header>\n\n  <div ng-if=\"!msg.payload\" class=\"bd-empty\">\n    <h2>En attente de données</h2>\n    <p class=\"bd-subtitle\">Ouvrez le simulateur pour recevoir les indicateurs de la ligne.</p>\n  </div>\n\n  <section ng-if=\"msg.payload\">\n    <div class=\"bd-grid\">\n      <div class=\"bd-card\">\n        <div class=\"bd-label\">PASSAGES TOTAL</div>\n        <strong class=\"bd-value\">{{msg.payload.passages | number:0}}</strong><span class=\"bd-note\">Bouteilles comptabilisées</span>\n      </div>\n      <div class=\"bd-card\">\n        <div class=\"bd-label\">CONFORMES</div>\n        <strong class=\"bd-value bd-green\">{{msg.payload.conformes | number:0}}</strong><span class=\"bd-note\">Qualité validée</span>\n      </div>\n      <div class=\"bd-card\">\n        <div class=\"bd-label\">REJETS</div>\n        <strong class=\"bd-value bd-red\">{{msg.payload.rejets | number:0}}</strong><span class=\"bd-note\">Bouteilles non conformes</span>\n      </div>\n      <div class=\"bd-card\">\n        <div class=\"bd-label\">EMBALLÉS</div>\n        <strong class=\"bd-value bd-blue\">{{msg.payload.emballes | number:0}}</strong><span class=\"bd-note\">Emballage terminé</span>\n      </div>\n    </div>\n\n    <h3 class=\"bd-section\">Performance de la ligne</h3>\n    <div class=\"bd-grid bd-two\">\n      <div class=\"bd-card\">\n        <div class=\"bd-label\">TAUX DE DÉFAUT</div>\n        <strong class=\"bd-value bd-orange\" ng-class=\"{'bd-red': msg.payload.tauxDefaut > 30}\">{{msg.payload.tauxDefaut | number:1}} <span class=\"bd-unit\">%</span></strong>\n        <progress class=\"bd-meter\" max=\"100\" ng-attr-value=\"{{msg.payload.tauxDefaut}}\"\n          aria-label=\"Taux de défaut en pourcentage\"></progress>\n        <div class=\"bd-note\">Seuil d’arrêt : plus de 30 % après 5 passages.</div>\n        <div class=\"bd-alert\" ng-if=\"msg.payload.passages >= 5 && msg.payload.tauxDefaut > 30\">Seuil de défaut dépassé\n        </div>\n      </div>\n      <div class=\"bd-card\">\n        <div class=\"bd-label\">DÉBIT MESURÉ</div>\n        <strong class=\"bd-value bd-blue\">{{msg.payload.produitsParMinute | number:0}} <span class=\"bd-unit\">bouteilles/min</span></strong>\n        <div class=\"bd-note\">Passages sur les 60 dernières secondes</div>\n        <div class=\"bd-section\">Vitesse convoyeur : {{msg.payload.vitesse | number:0}} <span class=\"bd-unit\">px/s</span>\n        </div>\n        <div class=\"bd-note\">Consigne du simulateur</div>\n      </div>\n    </div>\n\n    <h3 class=\"bd-section\">Files d’attente</h3>\n    <div class=\"bd-grid bd-two\">\n      <div class=\"bd-card\">\n        <div class=\"bd-label\">POSTE EMBALLAGE</div>\n        <strong class=\"bd-value\" ng-class=\"{'bd-orange': msg.payload.attenteEmballage >= 3}\">{{msg.payload.attenteEmballage | number:0}} <span class=\"bd-unit\">en attente</span></strong>\n        <span class=\"bd-note\">{{msg.payload.attenteEmballage >= 3 ? 'Poste saturé — accumulation de bouteilles' : 'File fluide'}}</span>\n      </div>\n      <div class=\"bd-card\">\n        <div class=\"bd-label\">POSTE CONTRÔLE QUALITÉ</div>\n        <strong class=\"bd-value\" ng-class=\"{'bd-orange': msg.payload.attenteControle >= 3}\">{{msg.payload.attenteControle | number:0}} <span class=\"bd-unit\">en attente</span></strong>\n        <span class=\"bd-note\">{{msg.payload.attenteControle >= 3 ? 'Poste saturé — accumulation de bouteilles' : 'File fluide'}}</span>\n      </div>\n    </div>\n    <footer class=\"bd-footer\">\n      Dernière réception : <strong>{{msg.payload.timestamp | date:'dd/MM/yyyy HH:mm:ss'}}</strong><br>\n      Dernier état reçu. Si le simulateur est fermé, les valeurs restent affichées.\n    </footer>\n  </section>\n</div>",
+    "storeOutMessages": true,
+    "fwdInMessages": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 660,
+    "y": 80,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "cd22eae94373654c",
+    "type": "debug",
+    "z": "52c76f4166d1a2c5",
+    "name": "Données reçues",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 660,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "b0b83c0a50d2af30",
+    "type": "http response",
+    "z": "52c76f4166d1a2c5",
+    "name": "Réponse HTTP",
+    "statusCode": "",
+    "headers": {},
+    "x": 670,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "bottle-group",
+    "type": "ui_group",
+    "name": "Ligne de production",
+    "tab": "bottle-tab",
+    "order": 1,
+    "disp": true,
+    "width": "6",
+    "collapse": false
+  },
+  {
+    "id": "bottle-tab",
+    "type": "ui_tab",
+    "name": "Bouteilles",
+    "icon": "dashboard",
+    "order": 1,
+    "disabled": false,
+    "hidden": false
+  },
+  {
+    "id": "ed4722f2ebb29464",
+    "type": "global-config",
+    "env": [],
+    "modules": {
+      "node-red-dashboard": "3.6.6"
+    }
+  }
+]

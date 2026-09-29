@@ -223,6 +223,8 @@
       </div>
     </section>
 
+    <p id="telemetryStatus" role="status">Node-RED : connexion en cours…</p>
+
     <section class="stage">
       <svg id="factory" viewBox="0 0 1500 760" role="img" aria-label="Simulation d'une ligne de production industrielle">
         <defs>
@@ -948,7 +950,13 @@
         updateDashboard();
         requestAnimationFrame(frame);
       }
-      function publishTelemetry() {
+      let telemetryPending = false;
+
+      async function publishTelemetry() {
+  if (telemetryPending) return;
+  telemetryPending = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
   const now = Date.now();
   const passagesRecents = sim.passageTimes.filter((time) => now - time <= 60000).length;
   const tauxDefaut = sim.totals.passages
@@ -963,9 +971,12 @@
         ? 'EN PRODUCTION'
         : 'ARRÊTÉE';
 
-  fetch('http://localhost:1880/api/telemetry', {
+  try {
+  const response = await fetch('http://localhost:1880/api/telemetry', {
+    signal: controller.signal,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // JSON transmis en texte pour éviter le prévol CORS.
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({
       passages: sim.totals.passages,
       conformes: sim.totals.good,
@@ -979,7 +990,18 @@
       attenteControle: sim.qualityQueue.length
       
     })
-  }).catch((error) => console.error('Envoi Node-RED impossible :', error));
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const result = await response.json();
+  if (result.ok !== true) throw new Error('Réponse Node-RED inattendue');
+  $('telemetryStatus').textContent = `Node-RED : connecté — dernier envoi à ${new Date().toLocaleTimeString('fr-FR')}`;
+  } catch (error) {
+    console.error('Envoi Node-RED impossible :', error);
+    $('telemetryStatus').textContent = `Node-RED : échec (${error.name === 'AbortError' ? 'délai dépassé' : error.message}). Vérifier l’adresse http://localhost:1880 et le flow déployé.`;
+  } finally {
+    clearTimeout(timeout);
+    telemetryPending = false;
+  }
 }
 
       setInterval(publishTelemetry, 1000);
