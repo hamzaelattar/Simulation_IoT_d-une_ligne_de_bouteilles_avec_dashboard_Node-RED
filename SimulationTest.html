@@ -948,7 +948,41 @@
         updateDashboard();
         requestAnimationFrame(frame);
       }
+      function publishTelemetry() {
+  const now = Date.now();
+  const passagesRecents = sim.passageTimes.filter((time) => now - time <= 60000).length;
+  const tauxDefaut = sim.totals.passages
+    ? sim.totals.reject / sim.totals.passages * 100
+    : 0;
 
+  const statut = sim.fault
+    ? 'EN PANNE'
+    : sim.paused
+      ? 'EN PAUSE'
+      : sim.running
+        ? 'EN PRODUCTION'
+        : 'ARRÊTÉE';
+
+  fetch('http://localhost:1880/api/telemetry', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      passages: sim.totals.passages,
+      conformes: sim.totals.good,
+      rejets: sim.totals.reject,
+      emballes: sim.totals.packed,
+      tauxDefaut: Number(tauxDefaut.toFixed(1)),
+      produitsParMinute: passagesRecents,
+      vitesse: config.speed,
+      statut,
+      attenteEmballage: sim.packQueue.length,
+      attenteControle: sim.qualityQueue.length
+      
+    })
+  }).catch((error) => console.error('Envoi Node-RED impossible :', error));
+}
+
+      setInterval(publishTelemetry, 1000);
       updateDashboard();
       requestAnimationFrame(frame);
     })();
