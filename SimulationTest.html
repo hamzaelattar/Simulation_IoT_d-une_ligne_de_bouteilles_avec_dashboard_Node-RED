@@ -433,6 +433,7 @@
     </section>
   </main>
 
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script>
     (() => {
       'use strict';
@@ -950,13 +951,56 @@
         updateDashboard();
         requestAnimationFrame(frame);
       }
-      let telemetryPending = false;
+      const mqttTopic = 'ligne/bouteilles/telemetry';
+      let mqttClient = null;
+      let mqttReady = false;
 
-      async function publishTelemetry() {
-  if (telemetryPending) return;
-  telemetryPending = true;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+      function setTelemetryStatus(text) {
+        $('telemetryStatus').textContent = text;
+      }
+
+      function setupMqtt() {
+        if (!window.mqtt) {
+          setTelemetryStatus('MQTT : librairie MQTT.js indisponible. Vérifier la connexion internet.');
+          return;
+        }
+
+        mqttClient = mqtt.connect('ws://localhost:9001', {
+          clientId: `simulateur-bouteilles-${Math.random().toString(16).slice(2)}`,
+          clean: true,
+          connectTimeout: 5000,
+          reconnectPeriod: 2000
+        });
+
+        mqttClient.on('connect', () => {
+          mqttReady = true;
+          setTelemetryStatus('MQTT : connecté au broker ws://localhost:9001');
+        });
+
+        mqttClient.on('reconnect', () => {
+          mqttReady = false;
+          setTelemetryStatus('MQTT : reconnexion au broker ws://localhost:9001...');
+        });
+
+        mqttClient.on('offline', () => {
+          mqttReady = false;
+          setTelemetryStatus('MQTT : broker hors ligne. Vérifier Mosquitto WebSocket sur le port 9001.');
+        });
+
+        mqttClient.on('error', (error) => {
+          mqttReady = false;
+          console.error('Connexion MQTT impossible :', error);
+          setTelemetryStatus(`MQTT : échec (${error.message}). Vérifier ws://localhost:9001.`);
+        });
+      }
+
+      function publishMqttTelemetry(payload) {
+        if (!mqttClient || !mqttReady) return false;
+        mqttClient.publish(mqttTopic, JSON.stringify(payload), { qos: 0, retain: false });
+        return true;
+      }
+
+      function publishTelemetry() {
   const now = Date.now();
   const passagesRecents = sim.passageTimes.filter((time) => now - time <= 60000).length;
   const tauxDefaut = sim.totals.passages
@@ -971,39 +1015,28 @@
         ? 'EN PRODUCTION'
         : 'ARRÊTÉE';
 
-  try {
-  const response = await fetch('http://localhost:1880/api/telemetry', {
-    signal: controller.signal,
-    method: 'POST',
-    // JSON transmis en texte pour éviter le prévol CORS.
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({
-      passages: sim.totals.passages,
-      conformes: sim.totals.good,
-      rejets: sim.totals.reject,
-      emballes: sim.totals.packed,
-      tauxDefaut: Number(tauxDefaut.toFixed(1)),
-      produitsParMinute: passagesRecents,
-      vitesse: config.speed,
-      statut,
-      attenteEmballage: sim.packQueue.length,
-      attenteControle: sim.qualityQueue.length
-      
-    })
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const result = await response.json();
-  if (result.ok !== true) throw new Error('Réponse Node-RED inattendue');
-  $('telemetryStatus').textContent = `Node-RED : connecté — dernier envoi à ${new Date().toLocaleTimeString('fr-FR')}`;
-  } catch (error) {
-    console.error('Envoi Node-RED impossible :', error);
-    $('telemetryStatus').textContent = `Node-RED : échec (${error.name === 'AbortError' ? 'délai dépassé' : error.message}). Vérifier l’adresse http://localhost:1880 et le flow déployé.`;
-  } finally {
-    clearTimeout(timeout);
-    telemetryPending = false;
+  const telemetry = {
+    passages: sim.totals.passages,
+    conformes: sim.totals.good,
+    rejets: sim.totals.reject,
+    emballes: sim.totals.packed,
+    tauxDefaut: Number(tauxDefaut.toFixed(1)),
+    produitsParMinute: passagesRecents,
+    vitesse: config.speed,
+    statut,
+    attenteEmballage: sim.packQueue.length,
+    attenteControle: sim.qualityQueue.length
+  };
+
+  const mqttSent = publishMqttTelemetry(telemetry);
+  if (mqttSent) {
+    setTelemetryStatus(`MQTT : publié sur ${mqttTopic} — dernier envoi à ${new Date().toLocaleTimeString('fr-FR')}`);
+  } else {
+    setTelemetryStatus('MQTT : non connecté. Vérifier Mosquitto WebSocket sur ws://localhost:9001.');
   }
 }
 
+      setupMqtt();
       setInterval(publishTelemetry, 1000);
       updateDashboard();
       requestAnimationFrame(frame);

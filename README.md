@@ -18,6 +18,7 @@ Le fichier HTML du dashboard utilise AngularJS : il doit être placé dans un n�
 
 - Node-RED installé et démarré, accessible par défaut sur `http://localhost:1880`.
 - Le module **node-red-dashboard**, version **3.6.6** utilisée dans le flow fourni. Dans Node-RED, ouvrir **☰ → Gérer la palette → Installer**, rechercher `node-red-dashboard` et installer le module s’il manque.
+- Un broker MQTT local, par exemple **Mosquitto**, pour alimenter le dashboard par MQTT sur `localhost:1883`.
 - Un navigateur récent prenant en charge CSS `:has()` pour l’affichage pleine page.
 
 Ce flow utilise le dashboard classique (`ui_template`, `ui_group`, `ui_tab`) et sa syntaxe AngularJS.
@@ -26,7 +27,7 @@ Ce flow utilise le dashboard classique (`ui_template`, `ui_group`, `ui_tab`) et 
 
 1. Télécharger ou cloner ce dépôt, puis démarrer Node-RED.
 2. Ouvrir **http://localhost:1880**.
-3. Désactiver ou supprimer tout ancien flow qui expose déjà `POST /api/telemetry` pour éviter les routes en double.
+3. Désactiver ou supprimer tout ancien flow de test si vous réimportez le projet.
 4. Ouvrir **☰ → Importer → sélectionner un fichier à importer**, choisir **node-red-flow.json**, puis cliquer sur **Importer**.
 5. Cliquer sur **Déployer**. Si des nœuds sont inconnus, vérifier l’installation de `node-red-dashboard`.
 6. Ouvrir **SimulationTest.html** dans le navigateur, puis cliquer sur **Démarrer**.
@@ -66,25 +67,53 @@ Les files deviennent orange à partir de 3 bouteilles en attente. L’envoi cont
 
 ```text
 SimulationTest.html
-  └─ POST /api/telemetry
-       └─ Function « Valider et répondre »
-            ├─ sortie 1 → ui_template + Debug
-            └─ sortie 2 → HTTP Response
+  └─ MQTT over WebSocket ws://localhost:9001
+       └─ topic ligne/bouteilles/telemetry
+            └─ Broker Mosquitto
+                 └─ Node-RED MQTT in « MQTT télémétrie bouteilles »
+                      └─ Function « Valider MQTT »
+                           └─ ui_template + Debug
 ```
 
-Le simulateur transmet du JSON avec `Content-Type: text/plain` pour éviter le prévol CORS lié au type `application/json`. La Function le décode avec `JSON.parse`, vérifie les valeurs numériques et conserve `msg.req` et `msg.res` pour répondre. Une réception valide retourne HTTP 200 avec `{"ok":true}` ; des données invalides retournent HTTP 400.
+Le simulateur transmet du JSON par MQTT. La Function **Valider MQTT** décode le message avec `JSON.parse`, vérifie les valeurs numériques, ajoute `timestamp`, puis envoie les données vers le dashboard et le debug.
 
-Le simulateur ne lance qu’une requête à la fois et abandonne une requête après 5 secondes. L’erreur est affichée sur la page et dans la console du navigateur. La réponse autorise les origines croisées avec `Access-Control-Allow-Origin: *` : cette configuration convient à une démonstration locale sans authentification et doit être adaptée avant exposition publique.
+### Tester avec MQTT
 
-### Node-RED sur une autre machine
+Le flow importé contient déjà un nœud **MQTT in** qui écoute le broker local `localhost:1883` sur le topic :
 
-Dans `SimulationTest.html`, remplacer l’adresse de `fetch` :
+```text
+ligne/bouteilles/telemetry
+```
+
+Sur Linux/Debian/Ubuntu, installer et démarrer Mosquitto :
+
+```sh
+sudo apt update
+sudo apt install mosquitto mosquitto-clients
+mosquitto -c mosquitto-websockets.conf -v
+```
+
+Cette commande lance un broker local de test avec deux ports : `1883` pour Node-RED et `9001` en WebSocket pour le simulateur HTML. Laissez ce terminal ouvert pendant la simulation.
+
+Après import du flow et déploiement dans Node-RED, publier un message de test :
+
+```sh
+mosquitto_pub -h localhost -p 1883 -t ligne/bouteilles/telemetry -m '{"passages":10,"conformes":9,"rejets":1,"emballes":12,"tauxDefaut":10,"produitsParMinute":10,"vitesse":90,"statut":"EN PRODUCTION","attenteEmballage":2,"attenteControle":1}'
+```
+
+Le dashboard `/ui` et le debug **Données reçues** doivent afficher les valeurs reçues. Si le broker est sur une autre machine, modifier la configuration du broker dans le nœud **Broker MQTT local** et remplacer `localhost` par l’adresse IP du broker.
+
+Important : dans MQTT, le broker ne crée pas les données lui-même. Un appareil, un script ou un simulateur publie les messages vers le broker ; Node-RED s’abonne au topic et reçoit ces messages.
+
+### Node-RED ou broker sur une autre machine
+
+Dans `SimulationTest.html`, remplacer l’adresse WebSocket :
 
 ```javascript
-http://localhost:1880/api/telemetry
+ws://localhost:9001
 ```
 
-par l’adresse accessible depuis le navigateur, par exemple `http://192.168.1.10:1880/api/telemetry`. Ouvrir aussi le dashboard sur cette machine : `http://192.168.1.10:1880/ui`. Adapter le port ou le préfixe de chemin si la configuration Node-RED diffère. Une page du simulateur servie en HTTPS nécessite une URL Node-RED HTTPS pour éviter le blocage du contenu mixte.
+par l’adresse accessible depuis le navigateur, par exemple `ws://192.168.1.10:9001`. Dans Node-RED, modifier aussi la configuration du broker MQTT si Mosquitto n’est pas sur la même machine que Node-RED. Une page du simulateur servie en HTTPS nécessite une URL WebSocket sécurisée `wss://...` pour éviter le blocage du contenu mixte.
 
 ## Personnaliser le dashboard
 
@@ -97,18 +126,16 @@ par l’adresse accessible depuis le navigateur, par exemple `http://192.168.1.1
 
 | Symptôme | Vérification |
 | --- | --- |
-| Aucun message dans Debug | Vérifier l’adresse dans `fetch`, le déploiement du flow et l’activation du nœud Debug |
-| HTTP 404 | Vérifier la route `POST /api/telemetry` et l’absence de préfixe personnalisé |
-| HTTP 400 | Vérifier que le flow contient `JSON.parse(data)` et que les compteurs sont des nombres positifs ou nuls |
-| Délai dépassé | Vérifier que la sortie 2 de la Function rejoint HTTP Response et conserve le message HTTP original |
-| Erreur réseau ou CORS | Vérifier le serveur, le port, les autorisations du navigateur, le type `text/plain` et les en-têtes de réponse |
+| Aucun message dans Debug | Vérifier Mosquitto, le topic `ligne/bouteilles/telemetry`, le déploiement du flow et l’activation du nœud Debug |
+| MQTT in déconnecté | Vérifier que Mosquitto écoute sur `localhost:1883` et que le broker du nœud Node-RED pointe vers le bon hôte |
+| Simulateur non connecté | Vérifier que Mosquitto écoute en WebSocket sur `ws://localhost:9001` |
+| JSON MQTT invalide | Vérifier que le message publié est un objet JSON et que les compteurs sont des nombres positifs ou nuls |
+| Erreur réseau navigateur | Vérifier le port WebSocket, l’adresse `ws://localhost:9001` et le chargement de MQTT.js |
 | Dashboard vide ou nœuds inconnus | Vérifier `node-red-dashboard`, le groupe du template et la réception dans Debug |
 | Ancienne interface affichée | Recharger avec Ctrl+F5 après le déploiement |
 
-Dans les outils développeur du navigateur (**F12 → Réseau / Console**), le POST doit retourner HTTP 200. Pour tester indépendamment du navigateur, exécuter la commande suivante ; elle envoie des valeurs de démonstration qui apparaîtront dans le dashboard :
+Pour tester indépendamment du navigateur, exécuter la commande suivante ; elle envoie des valeurs de démonstration qui apparaîtront dans le dashboard :
 
 ```sh
-curl -i http://localhost:1880/api/telemetry \
-  -H 'Content-Type: text/plain' \
-  --data '{"passages":10,"conformes":9,"rejets":1,"emballes":12,"tauxDefaut":10,"produitsParMinute":10,"vitesse":90,"statut":"EN PRODUCTION","attenteEmballage":2,"attenteControle":1}'
+mosquitto_pub -h localhost -p 1883 -t ligne/bouteilles/telemetry -m '{"passages":10,"conformes":9,"rejets":1,"emballes":12,"tauxDefaut":10,"produitsParMinute":10,"vitesse":90,"statut":"EN PRODUCTION","attenteEmballage":2,"attenteControle":1}'
 ```
